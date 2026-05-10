@@ -16,3 +16,10 @@
 - macOS：双击或运行 `start_macos.command`（可能需要先 `chmod +x start_macos.command`）
 
 详情见 `docs/zh-CN/quickstart.md`。
+
+
+## v0.2.1 Update
+- Universal bootstrap (Windows/macOS) with portable micromamba and runtime/env reuse.
+- Settings panel supports provider dropdown and API key masked state.
+- Project creation supports project_template (2d/3d) and recent project list.
+- Godot generator now creates playable 2D/3D prototype file sets.

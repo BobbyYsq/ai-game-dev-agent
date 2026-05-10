@@ -16,3 +16,10 @@ It does not generate a complete commercial game in one shot.
 - macOS: run/double-click `start_macos.command` (may need `chmod +x start_macos.command`)
 
 See `docs/en/quickstart.md` for details.
+
+
+## v0.2.1 Update
+- Universal bootstrap (Windows/macOS) with portable micromamba and runtime/env reuse.
+- Settings panel supports provider dropdown and API key masked state.
+- Project creation supports project_template (2d/3d) and recent project list.
+- Godot generator now creates playable 2D/3D prototype file sets.

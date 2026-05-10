@@ -18,6 +18,7 @@ class CreateProjectResult:
     generated_files: list[str]
     review_summary: str
     next_steps: list[str]
+    project_template: str
 
 def slugify(text: str) -> str:
     slug = re.sub(r"[^a-zA-Z0-9]+", "-", text.strip().lower()).strip("-")
@@ -37,7 +38,7 @@ def create_ai_game_project(request) -> CreateProjectResult:
         (docs/"ASSET_LIST.md").write_text(generate_asset_list(request.project_name, request.game_idea, llm), encoding='utf-8')
         generated += [f"docs/{n}" for n in ["GDD.md","TECH_DESIGN.md","FEATURE_TASKS.md","ASSET_LIST.md"]]
     if request.generate_godot_skeleton:
-        for fp in generate_godot_project(pdir, request.project_name, request.game_type):
+        for fp in generate_godot_project(pdir, request.project_name, request.game_type, request.project_template):
             generated.append(str(fp.relative_to(pdir)))
     review = generate_review_report(request.project_name, generated, llm)
     (pdir/"docs"/"REVIEW_REPORT.md").write_text(review, encoding='utf-8')
@@ -47,4 +48,4 @@ def create_ai_game_project(request) -> CreateProjectResult:
             init_repo(pdir); commit_all(pdir, "Initial AI-generated project scaffold")
         except Exception:
             pass
-    return CreateProjectResult(True, slug, str(pdir), sorted(set(generated)), "Created a first playable Godot project skeleton.", ["Open project in Godot 4.", "Review docs/GDD.md.", "Run Main scene."])
+    return CreateProjectResult(True, slug, str(pdir), sorted(set(generated)), "Created a playable Godot prototype.", ["Open project in Godot 4.", "Review docs/GDD.md.", "Run Main scene."], request.project_template)
