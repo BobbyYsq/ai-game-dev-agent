@@ -1,6 +1,6 @@
 from pathlib import Path
 
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.2.1"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_DIR = PROJECT_ROOT / "workspace"
 SETTINGS_DIR = WORKSPACE_DIR / "config"
