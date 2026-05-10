@@ -29,19 +29,21 @@ def create_ai_game_project(request) -> CreateProjectResult:
     slug = slugify(request.project_name)
     pdir = GENERATED_PROJECTS_DIR / slug
     pdir.mkdir(parents=True, exist_ok=True)
+    docs_dir = pdir / "docs"
     generated = []
     if request.generate_docs:
-        docs = pdir / "docs"; docs.mkdir(parents=True, exist_ok=True)
-        (docs/"GDD.md").write_text(generate_gdd(request.project_name, request.game_idea, llm), encoding='utf-8')
-        (docs/"TECH_DESIGN.md").write_text(generate_tech_design(request.project_name, request.game_type, llm), encoding='utf-8')
-        (docs/"FEATURE_TASKS.md").write_text(build_feature_plan(request.game_idea, request.game_type, request.prototype_scope, llm), encoding='utf-8')
-        (docs/"ASSET_LIST.md").write_text(generate_asset_list(request.project_name, request.game_idea, llm), encoding='utf-8')
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        (docs_dir/"GDD.md").write_text(generate_gdd(request.project_name, request.game_idea, llm), encoding='utf-8')
+        (docs_dir/"TECH_DESIGN.md").write_text(generate_tech_design(request.project_name, request.game_type, llm), encoding='utf-8')
+        (docs_dir/"FEATURE_TASKS.md").write_text(build_feature_plan(request.game_idea, request.game_type, request.prototype_scope, llm), encoding='utf-8')
+        (docs_dir/"ASSET_LIST.md").write_text(generate_asset_list(request.project_name, request.game_idea, llm), encoding='utf-8')
         generated += [f"docs/{n}" for n in ["GDD.md","TECH_DESIGN.md","FEATURE_TASKS.md","ASSET_LIST.md"]]
     if request.generate_godot_skeleton:
         for fp in generate_godot_project(pdir, request.project_name, request.game_type, request.project_template):
             generated.append(str(fp.relative_to(pdir)))
     review = generate_review_report(request.project_name, generated, llm)
-    (pdir/"docs"/"REVIEW_REPORT.md").write_text(review, encoding='utf-8')
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    (docs_dir/"REVIEW_REPORT.md").write_text(review, encoding='utf-8')
     generated.append("docs/REVIEW_REPORT.md")
     if request.enable_git:
         try:

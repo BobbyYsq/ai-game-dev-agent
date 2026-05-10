@@ -1,5 +1,7 @@
 # ROADMAP
 
+This roadmap keeps external generation services out of v0.2.1. The current release focuses on startup reliability, local settings, project creation, and playable Godot prototype templates.
+
 ## v0.3 Image Generation Pipeline
 - Add image-2 provider.
 - Generate concept art into assets/generated/cache/images/.

@@ -1,4 +1,153 @@
-<!doctype html><html><head><meta charset='utf-8'><title>AI Game Development Agent</title><link rel='stylesheet' href='/static/css/app.css'></head><body><h1>AI Game Development Agent</h1>
-<section><h2>Settings Panel</h2><label>LLM Provider <select id='provider'><option value='mock'>mock</option><option value='openai'>openai</option></select></label><label>OpenAI Model <input id='model' value='gpt-4.1-mini'></label><label>OpenAI API Key <input id='apiKey' type='password'></label><button onclick='saveSettings()'>Save Settings</button><button onclick='testLLM()'>Test Connection</button><span id='apiKeyStatus'></span></section>
-<section><h2>Project Panel</h2><input id='project_name' value='Shadow Garden'><textarea id='game_idea'>A 2D top-down action prototype in a haunted garden.</textarea><select id='project_template'><option value='2d'>2D Game Prototype</option><option value='3d'>3D Game Prototype</option></select><input id='game_type' value='2D top-down action'><input id='engine' value='Godot 4'><input id='prototype_scope' value='vertical slice'><label><input id='enable_git' type='checkbox' checked> Enable Git</label><label><input id='generate_docs' type='checkbox' checked> Generate Documentation</label><label><input id='generate_godot_skeleton' type='checkbox' checked> Generate Godot Prototype</label><button onclick='createProject()'>Create AI Game Project</button></section>
-<section><h2>Recent Projects Panel</h2><ul id='recent_projects'></ul></section><pre id='output'></pre><script src='/static/js/app.js'></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Game Development Agent</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow" data-i18n="eyebrow">Godot prototype workflow</p>
+      <h1>AI Game Development Agent</h1>
+      <p class="header-note" data-i18n="header_note">Startup only opens the agent dashboard. Projects are created only when you submit this form.</p>
+    </div>
+    <div class="header-actions">
+      <div class="language-toggle" aria-label="Language">
+        <button type="button" id="langEn" class="secondary compact" onclick="setLanguage('en')">EN</button>
+        <button type="button" id="langZh" class="secondary compact" onclick="setLanguage('zh')">中文</button>
+      </div>
+      <span id="connectionStatus" class="status-pill" data-i18n="loading">Loading</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel settings-panel" aria-labelledby="settings-title">
+      <div class="panel-heading">
+        <h2 id="settings-title" data-i18n="settings_title">Settings</h2>
+        <span id="apiKeyStatus" class="muted" data-i18n="checking_key">Checking key</span>
+      </div>
+
+      <label>
+        <span data-i18n="llm_provider">LLM Provider</span>
+        <select id="provider">
+          <option value="mock">mock</option>
+          <option value="openai">openai</option>
+        </select>
+      </label>
+
+      <label>
+        <span data-i18n="openai_model">OpenAI Model</span>
+        <select id="model">
+          <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+          <option value="gpt-4.1">gpt-4.1</option>
+          <option value="gpt-4o-mini">gpt-4o-mini</option>
+          <option value="gpt-4o">gpt-4o</option>
+        </select>
+      </label>
+
+      <label>
+        <span data-i18n="openai_key">OpenAI API Key</span>
+        <input id="apiKey" type="password" autocomplete="off" placeholder="sk-...">
+      </label>
+
+      <div class="button-row">
+        <button type="button" onclick="saveSettings()" data-i18n="save_settings">Save Settings</button>
+        <button type="button" class="secondary" onclick="testLLM()" data-i18n="test_connection">Test Connection</button>
+      </div>
+
+      <p id="settingsMessage" class="message" role="status"></p>
+    </section>
+
+    <section class="panel project-panel" aria-labelledby="project-title">
+      <div class="panel-heading">
+        <h2 id="project-title" data-i18n="create_project">Create Project</h2>
+        <span class="muted" data-i18n="templates_badge">v0.2.1 templates</span>
+      </div>
+
+      <p class="panel-note" data-i18n="project_note">This form starts the AI workflow: LLM planning and docs, then Godot project generation. Hastur/Godot editor bridge can be added as the next backend.</p>
+
+      <label>
+        <span data-i18n="project_name">Project Name</span>
+        <input id="project_name" autocomplete="off" data-i18n-placeholder="project_name_placeholder" placeholder="Example: Shadow Garden">
+      </label>
+
+      <label>
+        <span data-i18n="game_idea">Game Idea / GDD</span>
+        <textarea id="game_idea" rows="5" data-i18n-placeholder="game_idea_placeholder" placeholder="Describe the game you want the AI agent to build..."></textarea>
+      </label>
+
+      <div class="form-grid">
+        <label>
+          <span data-i18n="generation_pipeline">Generation Pipeline</span>
+          <select id="generation_pipeline">
+            <option value="llm_godot" data-i18n="pipeline_llm_godot">LLM + Godot file generator</option>
+            <option value="hastur_bridge" disabled data-i18n="pipeline_hastur">Hastur / Godot editor bridge (planned)</option>
+          </select>
+        </label>
+
+        <label>
+          <span data-i18n="godot_template">Godot Project Template</span>
+          <select id="project_template">
+            <option value="2d" data-i18n="template_2d">2D Game Prototype</option>
+            <option value="3d" data-i18n="template_3d">3D Game Prototype</option>
+          </select>
+        </label>
+
+        <label>
+          <span data-i18n="game_type">Game Type</span>
+          <input id="game_type" value="2D top-down action" autocomplete="off">
+        </label>
+
+        <label>
+          <span data-i18n="engine_version">Engine Version</span>
+          <select id="engine">
+            <option value="Godot 4">Godot 4</option>
+            <option value="Godot 4.2">Godot 4.2</option>
+            <option value="Godot 4.3">Godot 4.3</option>
+            <option value="Godot 4.4">Godot 4.4</option>
+          </select>
+        </label>
+
+        <label>
+          <span data-i18n="prototype_scope">Prototype Scope</span>
+          <select id="prototype_scope">
+            <option value="vertical slice" data-i18n="scope_vertical">vertical slice</option>
+            <option value="mechanics prototype" data-i18n="scope_mechanics">mechanics prototype</option>
+            <option value="playable demo" data-i18n="scope_demo">playable demo</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="checks">
+        <label><input id="enable_git" type="checkbox" checked> <span data-i18n="enable_git">Enable Git</span></label>
+        <label><input id="generate_docs" type="checkbox" checked> <span data-i18n="generate_docs">Generate Documentation</span></label>
+        <label><input id="generate_godot_skeleton" type="checkbox" checked> <span data-i18n="generate_godot">Generate Godot Prototype</span></label>
+      </div>
+
+      <button type="button" class="primary" onclick="createProject()" data-i18n="create_button">Run AI Project Generation</button>
+      <p id="projectMessage" class="message" role="status"></p>
+    </section>
+
+    <section class="panel recent-panel" aria-labelledby="recent-title">
+      <div class="panel-heading">
+        <h2 id="recent-title" data-i18n="recent_projects">Recent Projects</h2>
+        <button type="button" class="secondary compact" onclick="loadProjects()" data-i18n="refresh">Refresh</button>
+      </div>
+      <p class="panel-note" data-i18n="recent_note">These are existing generated projects. Startup does not create new projects.</p>
+      <ul id="recent_projects" class="project-list"></ul>
+    </section>
+
+    <section class="panel output-panel" aria-labelledby="output-title">
+      <div class="panel-heading">
+        <h2 id="output-title" data-i18n="output">Output</h2>
+        <span class="muted" data-i18n="output_badge">Generation result and errors</span>
+      </div>
+      <div id="output" class="output-empty" data-i18n="output_empty">No project created yet.</div>
+    </section>
+  </main>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

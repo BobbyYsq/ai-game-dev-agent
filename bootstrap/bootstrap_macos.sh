@@ -1,8 +1,87 @@
 #!/usr/bin/env bash
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"; RUNTIME_DIR="$ROOT/runtime"; MAMBA_DIR="$RUNTIME_DIR/micromamba"; MAMBA="$MAMBA_DIR/micromamba"; ENV_DIR="$RUNTIME_DIR/envs/ai-game-dev-agent"
-find_free_port(){ for p in 8000 8001 8002 8003; do lsof -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 || { echo "$p"; return 0; }; done; return 1; }
+
+log() {
+  printf '[ai-game-dev-agent] %s\n' "$1"
+}
+
+fail() {
+  printf '\n[ai-game-dev-agent] Startup failed: %s\n' "$1" >&2
+  exit 1
+}
+
+find_free_port() {
+  for port in 8000 8001 8002 8003; do
+    if ! lsof -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+      printf '%s\n' "$port"
+      return 0
+    fi
+    log "Port $port is busy, trying next candidate."
+  done
+  return 1
+}
+
+install_micromamba() {
+  if [ -x "$MAMBA" ]; then
+    log "Portable micromamba already exists."
+    return 0
+  fi
+
+  local arch platform archive
+  arch="$(uname -m)"
+  if [ "$arch" = "arm64" ]; then
+    platform="osx-arm64"
+  else
+    platform="osx-64"
+  fi
+
+  log "Downloading portable micromamba for $platform."
+  archive="$MAMBA_DIR/micromamba.tar.bz2"
+  curl -fsSL "https://micro.mamba.pm/api/micromamba/${platform}/latest" -o "$archive"
+
+  log "Extracting micromamba."
+  tar -xjf "$archive" -C "$MAMBA_DIR"
+  if [ ! -x "$MAMBA_DIR/bin/micromamba" ]; then
+    fail "Downloaded micromamba archive did not contain bin/micromamba."
+  fi
+  cp "$MAMBA_DIR/bin/micromamba" "$MAMBA"
+  chmod +x "$MAMBA"
+}
+
+ensure_runtime_environment() {
+  if [ -x "$ENV_DIR/bin/python" ]; then
+    log "Runtime environment already exists."
+    return 0
+  fi
+
+  if [ -d "$ENV_DIR" ]; then
+    log "Found incomplete runtime environment. Removing it before retry."
+    rm -rf "$ENV_DIR"
+  fi
+
+  log "Creating Python runtime with conda-forge only. This can take several minutes on first launch."
+  "$MAMBA" create -y -p "$ENV_DIR" -c conda-forge --override-channels python=3.11 pip
+
+  log "Installing Python packages from requirements.txt."
+  "$MAMBA" run -p "$ENV_DIR" python -m pip install -r "$ROOT/requirements.txt"
+}
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+RUNTIME_DIR="$ROOT/runtime"
+MAMBA_DIR="$RUNTIME_DIR/micromamba"
+MAMBA="$MAMBA_DIR/micromamba"
+ENV_DIR="$RUNTIME_DIR/envs/ai-game-dev-agent"
+
+log "Project root: $ROOT"
 mkdir -p "$MAMBA_DIR" "$(dirname "$ENV_DIR")"
-if [ ! -x "$MAMBA" ]; then arch="$(uname -m)"; [ "$arch" = "arm64" ] && platform="osx-arm64" || platform="osx-64"; curl -fsSL "https://micro.mamba.pm/api/micromamba/${platform}/latest" -o "$MAMBA_DIR/micromamba.tar.bz2"; tar -xjf "$MAMBA_DIR/micromamba.tar.bz2" -C "$MAMBA_DIR"; cp "$MAMBA_DIR/bin/micromamba" "$MAMBA"; chmod +x "$MAMBA"; fi
-[ -x "$ENV_DIR/bin/python" ] || "$MAMBA" create -y -p "$ENV_DIR" -f "$ROOT/environment.yml"
-PORT="$(find_free_port)"; URL="http://127.0.0.1:${PORT}"; open "$URL"; cd "$ROOT"; "$MAMBA" run -p "$ENV_DIR" python -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT"
+
+install_micromamba
+ensure_runtime_environment
+
+PORT="$(find_free_port)" || fail "No free port available in 8000-8003."
+URL="http://127.0.0.1:${PORT}"
+log "Starting FastAPI on $URL"
+open "$URL" || true
+
+cd "$ROOT"
+"$MAMBA" run -p "$ENV_DIR" python -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT" --app-dir "$ROOT"

@@ -6,12 +6,12 @@ from fastapi.templating import Jinja2Templates
 from app.api.routes_health import router as health_router
 from app.api.routes_projects import router as projects_router
 from app.api.routes_settings import router as settings_router
-from app.config import ensure_workspace_dirs
+from app.config import APP_VERSION, ensure_workspace_dirs
 
 
 def create_app() -> FastAPI:
     ensure_workspace_dirs()
-    app = FastAPI(title="AI Game Development Agent", version="0.2.0")
+    app = FastAPI(title="AI Game Development Agent", version=APP_VERSION)
     app.mount("/static", StaticFiles(directory="app/static"), name="static")
     app.include_router(health_router)
     app.include_router(settings_router)
@@ -20,7 +20,7 @@ def create_app() -> FastAPI:
 
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request):
-        return templates.TemplateResponse("index.html", {"request": request})
+        return templates.TemplateResponse(request, "index.html")
 
     return app
 

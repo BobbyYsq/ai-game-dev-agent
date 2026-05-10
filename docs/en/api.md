@@ -1,14 +1,81 @@
 # API
-- GET /api/health
-- GET/POST /api/settings
-- POST /api/settings/test-llm
-- POST /api/projects/create
-- GET /api/projects
-- GET /api/projects/{slug}
 
+Base URL after startup:
 
-## v0.2.1 Update
-- Universal bootstrap (Windows/macOS) with portable micromamba and runtime/env reuse.
-- Settings panel supports provider dropdown and API key masked state.
-- Project creation supports project_template (2d/3d) and recent project list.
-- Godot generator now creates playable 2D/3D prototype file sets.
+```text
+http://127.0.0.1:<port>
+```
+
+## Health
+
+`GET /api/health`
+
+Returns service status.
+
+## Settings
+
+`GET /api/settings`
+
+Returns public settings only. The API key is never returned in plaintext.
+
+```json
+{
+  "llm_provider": "mock",
+  "openai_model": "gpt-4.1-mini",
+  "has_openai_api_key": false
+}
+```
+
+`POST /api/settings`
+
+```json
+{
+  "llm_provider": "openai",
+  "openai_model": "gpt-4.1-mini",
+  "openai_api_key": "sk-..."
+}
+```
+
+`POST /api/settings/test-llm`
+
+Calls the active provider with a small ping prompt.
+
+## Projects
+
+`POST /api/projects/create`
+
+```json
+{
+  "project_name": "Shadow Garden",
+  "game_idea": "A 2D top-down action prototype in a haunted garden.",
+  "project_template": "2d",
+  "game_type": "2D top-down action",
+  "engine": "Godot 4",
+  "prototype_scope": "vertical slice",
+  "enable_git": true,
+  "generate_docs": true,
+  "generate_godot_skeleton": true
+}
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "project_slug": "shadow-garden",
+  "project_path": "workspace/generated_godot_projects/shadow-garden",
+  "generated_files": ["project.godot", "scenes/Main.tscn"],
+  "review_summary": "Created a playable Godot prototype.",
+  "next_steps": ["Open project in Godot 4."],
+  "project_template": "2d"
+}
+```
+
+`GET /api/projects`
+
+Lists recent generated projects.
+
+`GET /api/projects/{project_slug}`
+
+Returns the project path and generated file list.
