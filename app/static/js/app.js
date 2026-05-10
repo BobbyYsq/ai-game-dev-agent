@@ -1,0 +1,4 @@
+const out=()=>document.getElementById('output');
+async function saveSettings(){const b={llm_provider:provider.value,openai_model:model.value,openai_api_key:apiKey.value};const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});out().textContent=JSON.stringify(await r.json(),null,2)}
+async function testLLM(){const r=await fetch('/api/settings/test-llm',{method:'POST'});out().textContent=JSON.stringify(await r.json(),null,2)}
+async function createProject(){const b={project_name:project_name.value,game_idea:game_idea.value,game_type:'2D top-down action',engine:'Godot 4',prototype_scope:'vertical slice',enable_git:true,generate_docs:true,generate_godot_skeleton:true};const r=await fetch('/api/projects/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});out().textContent=JSON.stringify(await r.json(),null,2)}

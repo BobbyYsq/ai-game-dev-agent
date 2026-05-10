@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+runtime/
+workspace/config/*.json
+workspace/generated_godot_projects/*
+!workspace/generated_godot_projects/.gitkeep
+workspace/cache/*
+!workspace/cache/.gitkeep
+.DS_Store
