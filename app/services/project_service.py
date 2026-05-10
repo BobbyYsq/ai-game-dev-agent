@@ -40,7 +40,9 @@ def create_ai_game_project(request) -> CreateProjectResult:
         for fp in generate_godot_project(pdir, request.project_name, request.game_type):
             generated.append(str(fp.relative_to(pdir)))
     review = generate_review_report(request.project_name, generated, llm)
-    (pdir/"docs"/"REVIEW_REPORT.md").write_text(review, encoding='utf-8')
+    docs = pdir / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "REVIEW_REPORT.md").write_text(review, encoding='utf-8')
     generated.append("docs/REVIEW_REPORT.md")
     if request.enable_git:
         try:
