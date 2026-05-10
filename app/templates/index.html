@@ -1,0 +1,5 @@
+<!doctype html><html><head><meta charset='utf-8'><title>AI Game Development Agent</title><link rel='stylesheet' href='/static/css/app.css'></head>
+<body><h1>AI Game Development Agent</h1>
+<section><h2>Settings</h2><label>Provider <input id='provider' value='mock'></label><label>OpenAI Model <input id='model' value='gpt-4.1-mini'></label><label>OpenAI API Key <input id='apiKey' type='password'></label><button onclick='saveSettings()'>Save</button><button onclick='testLLM()'>Test</button></section>
+<section><h2>Create Project</h2><input id='project_name' value='Shadow Garden'><textarea id='game_idea'>A 2D top-down action prototype in a haunted garden.</textarea><button onclick='createProject()'>Create AI Game Project</button></section>
+<pre id='output'></pre><script src='/static/js/app.js'></script></body></html>
