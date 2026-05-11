@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.agent.godot_agent import generate_godot_project
 from app.config import GENERATED_PROJECTS_DIR
+from app.services.git_service import commit_all, init_repo
 from app.services.project_service import slugify
 from app.services.settings_service import load_private_settings
 
@@ -27,6 +28,7 @@ def create_godot_project(
     engine: str = "Godot 4",
     broker_host: str | None = None,
     broker_port: int | None = None,
+    enable_git: bool = True,
 ) -> GodotProjectResult:
     settings = load_private_settings()
     host = broker_host or str(settings.get("hastur_broker_host", "localhost"))
@@ -38,6 +40,9 @@ def create_godot_project(
     files = generate_godot_project(project_dir, project_name, game_type, project_template, host, port)
     _write_godot_notes(project_dir, engine, host, port)
     files.append(project_dir / "docs" / "GODOT_PROJECT.md")
+    if enable_git:
+        init_repo(project_dir)
+        commit_all(project_dir, "Initial Godot project")
 
     return GodotProjectResult(
         success=True,

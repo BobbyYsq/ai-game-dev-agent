@@ -24,6 +24,7 @@ This repository is a local AI game development control plane for Godot prototype
 - `app/services/hastur_service.py` validates structured Godot operations and sends controlled GDScript snippets to Hastur.
 - `app/services/broker_service.py` manages the local Hastur broker process from the UI.
 - `app/agent/godot_operation_planner.py` validates LLM-created Godot operation plans.
+- The dashboard uses one Godot Project creation panel for standalone Godot/Hastur projects; each panel renders its own feedback inline.
 - `hastur-operation-plugin-main/` is a vendored MIT-licensed third-party project.
 - `godot-docs/` is the local source of truth for Godot implementation details.
 
@@ -39,13 +40,18 @@ Implemented:
 - Automatic Hastur addon installation and editor-plugin enablement for newly generated Godot projects.
 - UI-managed broker start/stop/status/logs.
 - LLM-generated Godot operation plan endpoints with schema validation.
+- Generic LLM settings for OpenAI, Anthropic, DeepSeek, OpenAI-compatible, and local OpenAI-compatible endpoints.
+- Generic image API settings for OpenAI and OpenAI-compatible image generation.
+- Bilingual dashboard with panel-local outputs and inline Recent Project details.
 
 Current Codex task:
 
-- v0.3 completion implementation is in place across backend, UI, docs, tests, and licensing.
+- v0.3 comment follow-up implementation is in place across backend, UI, docs, and tests.
+- Keep only one non-AI Godot Project creation UI; project creation should use local Godot templates, install Hastur, and optionally initialize Git.
+- Keep model IDs editable so provider catalogs do not go stale in the UI.
 - Preserve the safety rule that the UI never exposes arbitrary GDScript input.
 - Keep broker defaults local-only: host `localhost`, TCP `5301`, HTTP `5302`.
-- Latest verification: `node --check app/static/js/app.js`, `runtime/envs/ai-game-dev-agent/python.exe -m compileall app`, and `runtime/envs/ai-game-dev-agent/python.exe -m pytest` passed.
+- Latest verification: `node --check app/static/js/app.js`, `runtime/envs/ai-game-dev-agent/python.exe -m compileall app`, and `runtime/envs/ai-game-dev-agent/python.exe -m pytest` passed on 2026-05-11.
 
 ## Hastur Integration Notes
 

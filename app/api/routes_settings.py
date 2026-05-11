@@ -8,10 +8,15 @@ router = APIRouter()
 
 class SettingsUpdateRequest(BaseModel):
     llm_provider: str | None = None
+    llm_api_key: str | None = None
+    llm_model: str | None = None
+    llm_base_url: str | None = None
     openai_api_key: str | None = None
     openai_model: str | None = None
     image_provider: str | None = None
     openai_image_model: str | None = None
+    image_api_key: str | None = None
+    image_base_url: str | None = None
     image_size: str | None = None
     image_quality: str | None = None
     hastur_enabled: bool | None = None

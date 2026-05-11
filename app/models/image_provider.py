@@ -36,10 +36,14 @@ class MockImageProvider:
 class OpenAIImageProvider:
     provider_name = "openai"
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, base_url: str | None = None, provider_name: str = "openai"):
         if not api_key:
-            raise ValueError("OpenAI API key is not configured.")
-        self.client = OpenAI(api_key=api_key)
+            raise ValueError("Image API key is not configured.")
+        kwargs = {"api_key": api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        self.client = OpenAI(**kwargs)
+        self.provider_name = provider_name
 
     def generate_image(self, prompt: str, model: str, size: str, quality: str) -> GeneratedImage:
         response = self.client.images.generate(
@@ -70,6 +74,11 @@ class OpenAIImageProvider:
 
 def get_image_provider():
     settings = load_private_settings()
-    if settings.get("image_provider") == "openai":
-        return OpenAIImageProvider(settings.get("openai_api_key", ""))
+    provider = settings.get("image_provider", "mock")
+    api_key = settings.get("image_api_key") or settings.get("openai_api_key", "")
+    base_url = settings.get("image_base_url") or ""
+    if provider == "openai":
+        return OpenAIImageProvider(api_key)
+    if provider == "openai_compatible":
+        return OpenAIImageProvider(api_key, base_url or None, provider)
     return MockImageProvider()

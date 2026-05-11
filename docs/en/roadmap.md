@@ -4,7 +4,7 @@
 
 Image generation, asset manifests, GDD image attachment, Blender reference notes, and the first safe Hastur bridge endpoints.
 
-Also includes standalone Godot project creation, automatic Hastur addon enablement, dashboard broker controls, LLM operation planning, and third-party MIT notices.
+Also includes standalone Godot project creation, automatic Hastur addon enablement, dashboard broker controls, LLM operation planning, generic LLM/image API settings, panel-local UI output, and third-party MIT notices.
 
 ## v0.4
 

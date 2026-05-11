@@ -22,7 +22,7 @@ User dashboard
 
 ## Agent Layer
 
-The agent modules are intentionally simple in v0.2.1. They wrap prompts for GDD, technical design, feature tasks, asset list, and review report. The provider can be `mock` for offline testing or `openai` for real text generation.
+The agent modules are intentionally simple. They wrap prompts for GDD, technical design, feature tasks, asset list, review reports, and Godot operation plans. Text generation can use `mock`, `openai`, `anthropic`, `deepseek`, or an OpenAI-compatible local/custom endpoint configured from the dashboard.
 
 ## Godot Generator
 
@@ -46,7 +46,7 @@ The app is organized as a local FastAPI control plane:
 - `app/services/godot_project_service.py` creates standalone Godot projects with the Hastur addon copied into `addons/hasturoperationgd/`.
 - `app/services/godot_operation_service.py` uses the configured LLM provider to plan Godot operations, then validates them before execution.
 - `app/agent/godot_operation_planner.py` prepares the future LLM planning step by validating JSON operation plans.
-- `app/templates/index.html` and `app/static/js/app.js` provide the bilingual dashboard.
+- `app/templates/index.html` and `app/static/js/app.js` provide the bilingual dashboard. The Godot Project panel is the only project creation UI; action results render inside the panel that produced them instead of a shared output area.
 
 Generated project assets are kept inside each Godot project folder so the project remains portable.
 

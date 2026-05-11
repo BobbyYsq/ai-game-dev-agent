@@ -13,6 +13,7 @@ class CreateGodotProjectRequest(BaseModel):
     engine: str = "Godot 4"
     broker_host: str | None = None
     broker_port: int | None = None
+    enable_git: bool = True
 
 
 @router.post("/api/godot-projects/create")
@@ -29,6 +30,7 @@ def create_standalone_godot_project(payload: CreateGodotProjectRequest):
             engine=payload.engine,
             broker_host=payload.broker_host,
             broker_port=payload.broker_port,
+            enable_git=payload.enable_git,
         ).__dict__
     except FileNotFoundError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

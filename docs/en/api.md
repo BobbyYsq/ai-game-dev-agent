@@ -19,10 +19,13 @@ Saves local settings in `workspace/config/settings.json`.
 ```json
 {
   "llm_provider": "openai",
-  "openai_model": "gpt-4.1-mini",
-  "openai_api_key": "sk-...",
+  "llm_model": "gpt-5.4-mini",
+  "llm_base_url": "",
+  "llm_api_key": "sk-...",
   "image_provider": "openai",
   "openai_image_model": "gpt-image-2",
+  "image_base_url": "",
+  "image_api_key": "sk-...",
   "image_size": "1024x1024",
   "image_quality": "medium",
   "hastur_enabled": true,
@@ -30,6 +33,8 @@ Saves local settings in `workspace/config/settings.json`.
   "hastur_auth_token": "local-token"
 }
 ```
+
+Supported text providers are `mock`, `openai`, `anthropic`, `deepseek`, `openai_compatible`, and `local_openai_compatible`. Image providers are `mock`, `openai`, and `openai_compatible`. Model IDs are stored as editable strings so the UI can follow each provider's current model catalog instead of forcing stale hard-coded choices.
 
 ## Projects
 
@@ -158,3 +163,15 @@ Plans and executes in one request.
 `POST /api/godot-projects/create`
 
 Creates a standalone Godot project, copies `addons/hasturoperationgd/`, enables the plugin in `project.godot`, and writes MIT third-party notices.
+
+```json
+{
+  "project_name": "Shadow Garden",
+  "project_template": "2d",
+  "game_type": "2D top-down action",
+  "engine": "Godot 4",
+  "broker_host": "localhost",
+  "broker_port": 5301,
+  "enable_git": true
+}
+```

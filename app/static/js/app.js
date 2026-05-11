@@ -1,7 +1,8 @@
 const translations = {
   en: {
     eyebrow: "Godot prototype workflow",
-    header_note: "Startup only opens this dashboard. The agent creates projects only after you submit a workflow.",
+    app_title: "AI Game Development Agent",
+    header_note: "Create Godot prototypes, generate assets, and operate Godot through a local Hastur broker.",
     loading: "Loading",
     ready: "Ready",
     settings_error: "Settings error",
@@ -10,41 +11,28 @@ const translations = {
     key_configured: "API key configured",
     key_missing: "API key not configured",
     llm_provider: "LLM Provider",
-    openai_model: "OpenAI Text Model",
-    openai_key: "OpenAI API Key",
+    llm_model: "Text Model",
+    llm_base_url: "LLM Base URL",
+    llm_key: "LLM API Key",
     save_settings: "Save Settings",
     test_connection: "Test Connection",
     saving_settings: "Saving settings...",
     settings_saved: "Settings saved.",
     testing_connection: "Testing connection...",
     connection_ok: "Connection test succeeded.",
-    create_project: "Create Project",
-    templates_badge: "v0.3 workflow",
-    project_note: "This form starts the AI workflow: LLM planning, documentation, and optional Godot prototype generation.",
     project_name: "Project Name",
     project_name_placeholder: "Example: Shadow Garden",
-    game_idea: "Game Idea / GDD",
-    game_idea_placeholder: "Describe the game you want the AI agent to build...",
     godot_template: "Godot Project Template",
     template_2d: "2D Game Prototype",
     template_3d: "3D Game Prototype",
     game_type: "Game Type",
     engine_version: "Engine Version",
-    prototype_scope: "Prototype Scope",
-    scope_vertical: "vertical slice",
-    scope_mechanics: "mechanics prototype",
-    scope_demo: "playable demo",
-    enable_git: "Enable Git",
-    generate_docs: "Generate Documentation",
-    generate_godot: "Generate Godot Prototype",
-    create_button: "Run AI Project Generation",
-    project_required: "Project name and game idea are required.",
-    creating_project: "Creating project...",
-    project_working: "The agent is generating docs, Godot files, and a review report.",
-    project_created: "Project created.",
+    enable_git: "Initialize Git",
+    project_required: "Project name is required.",
+    creating_project: "Creating Godot project...",
     godot_project_title: "Godot Project",
     godot_project_badge: "auto Hastur addon",
-    godot_project_note: "Create a Godot project with the Hastur editor plugin copied and enabled automatically.",
+    godot_project_note: "Create a Godot project with Hastur copied, enabled, and committed to a fresh Git repository.",
     broker_host: "Broker Host",
     broker_http_port: "HTTP Port",
     broker_tcp_port: "TCP Port",
@@ -56,11 +44,13 @@ const translations = {
     details: "Details",
     no_projects: "No generated projects yet.",
     assets_title: "Assets",
-    assets_badge: "Image-2 pipeline",
+    assets_badge: "image pipeline",
     assets_note: "Generate concept art, GDD references, 2D drafts, UI icons, texture references, or Blender reference images for an existing project.",
     asset_project: "Project",
     image_provider: "Image Provider",
     image_model: "Image Model",
+    image_base_url: "Image Base URL",
+    image_key: "Image API Key",
     asset_purpose: "Purpose",
     purpose_concept: "Concept art",
     purpose_gdd: "GDD reference",
@@ -72,7 +62,7 @@ const translations = {
     image_quality: "Quality",
     asset_prompt: "Image Prompt",
     asset_prompt_placeholder: "A haunted garden top-down action game concept art, readable silhouettes, dark fantasy.",
-    save_asset_settings: "Save Image Settings",
+    save_asset_settings: "Save Image Defaults",
     generate_image: "Generate Image",
     asset_project_required: "Select a project and enter an image prompt.",
     generating_image: "Generating image...",
@@ -104,21 +94,114 @@ const translations = {
     plan_and_execute: "Plan and Execute",
     hastur_project_required: "Select a project before applying an operation.",
     instruction_required: "Enter an instruction first.",
-    output: "Output",
-    output_badge: "Generation result and errors",
-    output_empty: "No project created yet.",
     status: "Status",
     project_slug: "Project slug",
     template: "Template",
     project_path: "Project path",
-    review_summary: "Review summary",
-    next_steps: "Next steps",
     generated_files: "Generated files",
   },
-  zh: {},
+  zh: {
+    eyebrow: "Godot 原型工作流",
+    app_title: "AI 游戏开发 Agent",
+    header_note: "创建 Godot 原型、生成资产，并通过本地 Hastur broker 操作 Godot。",
+    loading: "加载中",
+    ready: "就绪",
+    settings_error: "设置错误",
+    settings_title: "设置",
+    checking_key: "检查密钥",
+    key_configured: "API 密钥已配置",
+    key_missing: "API 密钥未配置",
+    llm_provider: "LLM 提供商",
+    llm_model: "文本模型",
+    llm_base_url: "LLM Base URL",
+    llm_key: "LLM API 密钥",
+    save_settings: "保存设置",
+    test_connection: "测试连接",
+    saving_settings: "正在保存设置...",
+    settings_saved: "设置已保存。",
+    testing_connection: "正在测试连接...",
+    connection_ok: "连接测试成功。",
+    project_name: "项目名称",
+    project_name_placeholder: "例如：Shadow Garden",
+    godot_template: "Godot 项目模板",
+    template_2d: "2D 游戏原型",
+    template_3d: "3D 游戏原型",
+    game_type: "游戏类型",
+    engine_version: "引擎版本",
+    enable_git: "初始化 Git",
+    project_required: "请输入项目名称。",
+    creating_project: "正在创建 Godot 项目...",
+    godot_project_title: "Godot 项目",
+    godot_project_badge: "自动启用 Hastur 插件",
+    godot_project_note: "创建带 Hastur 插件、自动启用并初始化 Git 的 Godot 项目。",
+    broker_host: "Broker 主机",
+    broker_http_port: "HTTP 端口",
+    broker_tcp_port: "TCP 端口",
+    create_godot_project: "创建 Godot 项目",
+    godot_project_created: "Godot 项目已创建。",
+    recent_projects: "最近项目",
+    recent_note: "这里显示已生成的项目。启动页面不会自动创建新项目。",
+    refresh: "刷新",
+    details: "详情",
+    no_projects: "还没有生成项目。",
+    assets_title: "资产",
+    assets_badge: "图像管线",
+    assets_note: "为已有项目生成概念图、GDD 参考图、2D 草图、UI 图标、贴图参考或 Blender 参考图。",
+    asset_project: "项目",
+    image_provider: "生图提供商",
+    image_model: "生图模型",
+    image_base_url: "生图 Base URL",
+    image_key: "生图 API 密钥",
+    asset_purpose: "用途",
+    purpose_concept: "概念图",
+    purpose_gdd: "GDD 参考",
+    purpose_sprite: "2D 角色草图",
+    purpose_icon: "UI/图标",
+    purpose_texture: "贴图参考",
+    purpose_blender: "Blender/3D 参考",
+    image_size: "尺寸",
+    image_quality: "质量",
+    asset_prompt: "图像提示词",
+    asset_prompt_placeholder: "暗黑花园俯视角动作游戏概念图，剪影清晰，暗黑奇幻风格。",
+    save_asset_settings: "保存生图默认值",
+    generate_image: "生成图像",
+    asset_project_required: "请选择项目并输入图像提示词。",
+    generating_image: "正在生成图像...",
+    image_generated: "图像已生成。",
+    no_assets: "还没有生成图像资产。",
+    attach_gdd: "附加到 GDD",
+    mark_blender: "标记为 Blender 参考",
+    asset_updated: "资产已更新。",
+    hastur_title: "Hastur 桥接",
+    hastur_badge: "Godot 编辑器操作",
+    hastur_note: "启动本地 broker，连接 Godot，并用已绑定的 LLM 交换安全的结构化操作。",
+    hastur_project: "项目",
+    hastur_enabled: "启用 Hastur",
+    hastur_base_url: "Broker URL",
+    hastur_token: "认证 Token",
+    save_hastur_settings: "保存 Hastur 设置",
+    start_broker: "启动 Broker",
+    stop_broker: "停止 Broker",
+    broker_status: "Broker 状态",
+    broker_logs: "Broker 日志",
+    check_hastur: "检查状态",
+    load_executors: "加载执行器",
+    apply_sample_operation: "添加测试节点",
+    ai_operation_title: "AI Godot 操作",
+    ai_instruction: "指令",
+    ai_instruction_placeholder: "向当前场景添加一个可见测试节点并保存。",
+    plan_operation: "生成计划",
+    execute_plan: "执行计划",
+    plan_and_execute: "生成并执行",
+    hastur_project_required: "执行操作前请选择项目。",
+    instruction_required: "请先输入指令。",
+    status: "状态",
+    project_slug: "项目 slug",
+    template: "模板",
+    project_path: "项目路径",
+    generated_files: "生成文件",
+  },
 };
-
-translations.zh = translations.en;
 
 const state = {
   language: localStorage.getItem("language") || "en",
@@ -142,9 +225,6 @@ function setLanguage(language) {
   applyTranslations();
   renderProjects();
   renderAssetGallery();
-  if ($("output").dataset.renderState) {
-    renderOutput(JSON.parse($("output").dataset.renderState));
-  }
 }
 
 function applyTranslations() {
@@ -181,26 +261,16 @@ async function requestJSON(url, options = {}) {
   return payload;
 }
 
-function ensureSelectValue(select, value) {
-  if (!select || !value) return;
-  const exists = Array.from(select.options).some((option) => option.value === value);
-  if (!exists) {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = value;
-    select.appendChild(option);
-  }
-  select.value = value;
-}
-
 async function loadSettings() {
   try {
     const data = await requestJSON("/api/settings");
-    $("provider").value = data.llm_provider;
-    ensureSelectValue($("model"), data.openai_model);
-    $("apiKeyStatus").textContent = data.has_openai_api_key ? t("key_configured") : t("key_missing");
-    $("image_provider").value = data.image_provider || "mock";
-    ensureSelectValue($("image_model"), data.openai_image_model || "gpt-image-2");
+    $("provider").value = data.llm_provider || "mock";
+    $("model").value = data.llm_model || data.openai_model || "gpt-5.4-mini";
+    $("llmBaseUrl").value = data.llm_base_url || "";
+    $("apiKeyStatus").textContent = data.has_llm_api_key ? t("key_configured") : t("key_missing");
+    $("settings_image_provider").value = data.image_provider || "mock";
+    $("settings_image_model").value = data.openai_image_model || "gpt-image-2";
+    $("imageBaseUrl").value = data.image_base_url || "";
     $("image_size").value = data.image_size || "1024x1024";
     $("image_quality").value = data.image_quality || "medium";
     $("hastur_enabled").checked = Boolean(data.hastur_enabled);
@@ -221,16 +291,28 @@ async function loadSettings() {
 async function saveSettings() {
   setMessage("settingsMessage", t("saving_settings"));
   try {
+    const llmModel = $("model").value.trim();
+    const imageModel = $("settings_image_model").value.trim();
     const result = await requestJSON("/api/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         llm_provider: $("provider").value,
-        openai_model: $("model").value,
-        openai_api_key: $("apiKey").value || null,
+        llm_model: llmModel,
+        openai_model: llmModel,
+        llm_base_url: $("llmBaseUrl").value.trim(),
+        llm_api_key: $("apiKey").value || null,
+        openai_api_key: $("provider").value === "openai" ? $("apiKey").value || null : null,
+        image_provider: $("settings_image_provider").value,
+        openai_image_model: imageModel,
+        image_base_url: $("imageBaseUrl").value.trim(),
+        image_api_key: $("imageApiKey").value || null,
+        image_size: $("image_size").value,
+        image_quality: $("image_quality").value,
       }),
     });
     $("apiKey").value = "";
+    $("imageApiKey").value = "";
     setMessage("settingsMessage", result.message || t("settings_saved"), "success");
     await loadSettings();
   } catch (error) {
@@ -245,8 +327,7 @@ async function saveAssetSettings() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        image_provider: $("image_provider").value,
-        openai_image_model: $("image_model").value,
+        openai_image_model: $("settings_image_model").value.trim() || "gpt-image-2",
         image_size: $("image_size").value,
         image_quality: $("image_quality").value,
       }),
@@ -294,68 +375,34 @@ async function testLLM() {
   }
 }
 
-function buildProjectPayload() {
-  return {
-    project_name: $("project_name").value.trim(),
-    game_idea: $("game_idea").value.trim(),
-    project_template: $("project_template").value,
-    game_type: $("game_type").value,
-    engine: $("engine").value,
-    prototype_scope: $("prototype_scope").value,
-    enable_git: $("enable_git").checked,
-    generate_docs: $("generate_docs").checked,
-    generate_godot_skeleton: $("generate_godot_skeleton").checked,
-  };
-}
-
 async function createProject() {
-  const payload = buildProjectPayload();
-  if (!payload.project_name || !payload.game_idea) {
+  const projectName = $("project_name").value.trim();
+  if (!projectName) {
     setMessage("projectMessage", t("project_required"), "error");
     return;
   }
   setMessage("projectMessage", t("creating_project"));
-  renderOutput({ status: "working", message: t("project_working") });
-  try {
-    const result = await requestJSON("/api/projects/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    setMessage("projectMessage", t("project_created"), "success");
-    renderProjectResult(result);
-    await loadProjects();
-  } catch (error) {
-    setMessage("projectMessage", error.message, "error");
-    renderOutput({ status: "error", message: error.message });
-  }
-}
-
-async function createGodotProject() {
-  const projectName = $("godot_project_name").value.trim();
-  if (!projectName) {
-    setMessage("godotProjectMessage", t("project_required"), "error");
-    return;
-  }
-  setMessage("godotProjectMessage", t("creating_project"));
+  renderProjectOutput({ status: "working", message: t("creating_project") });
   try {
     const result = await requestJSON("/api/godot-projects/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         project_name: projectName,
-        project_template: $("godot_project_template").value,
-        game_type: $("godot_game_type").value,
-        engine: $("godot_engine").value,
+        project_template: $("project_template").value,
+        game_type: $("game_type").value,
+        engine: $("engine").value,
         broker_host: $("godot_broker_host").value || "localhost",
         broker_port: Number($("godot_broker_port").value || 5301),
+        enable_git: $("enable_git").checked,
       }),
     });
-    setMessage("godotProjectMessage", t("godot_project_created"), "success");
-    renderProjectResult(result);
+    setMessage("projectMessage", t("godot_project_created"), "success");
+    renderProjectOutput(projectResultView(result));
     await loadProjects();
   } catch (error) {
-    setMessage("godotProjectMessage", error.message, "error");
+    setMessage("projectMessage", error.message, "error");
+    renderProjectOutput({ status: "error", message: error.message });
   }
 }
 
@@ -380,7 +427,7 @@ function renderProjectSelectors() {
     if (!state.projects.length) {
       select.innerHTML = `<option value="">${escapeHTML(t("no_projects"))}</option>`;
     } else {
-      ensureSelectValue(select, selected || state.projects[0].slug);
+      select.value = selected && state.projects.some((project) => project.slug === selected) ? selected : state.projects[0].slug;
     }
   });
   if (state.projects.length) {
@@ -391,9 +438,14 @@ function renderProjectSelectors() {
 async function showProjectDetails(slug) {
   try {
     const details = await requestJSON(`/api/projects/${encodeURIComponent(slug)}`);
-    renderOutput({ status: "details", slug: details.slug, path: details.path, generated_files: details.files });
+    renderDetailsOutput("recent_project_details", {
+      status: "details",
+      project_slug: details.slug,
+      project_path: details.path,
+      generated_files: details.files || [],
+    });
   } catch (error) {
-    renderOutput({ status: "error", message: error.message });
+    renderDetailsOutput("recent_project_details", { status: "error", message: error.message });
   }
 }
 
@@ -401,6 +453,7 @@ function renderProjects() {
   const list = $("recent_projects");
   if (!state.projects.length) {
     list.innerHTML = `<li class="muted-row">${escapeHTML(t("no_projects"))}</li>`;
+    $("recent_project_details").innerHTML = "";
     return;
   }
   list.innerHTML = state.projects
@@ -452,7 +505,7 @@ async function generateImageAsset() {
       body: JSON.stringify({
         prompt,
         purpose: $("asset_purpose").value,
-        model: $("image_model").value,
+        model: $("settings_image_model").value.trim() || "gpt-image-2",
         size: $("image_size").value,
         quality: $("image_quality").value,
       }),
@@ -669,22 +722,22 @@ async function planAndExecuteGodotOperation() {
   }
 }
 
-function renderProjectResult(result) {
-  renderOutput({
+function projectResultView(result) {
+  return {
     status: "success",
     project_slug: result.project_slug,
     project_template: result.project_template,
     project_path: result.project_path,
-    review_summary: result.review_summary,
-    next_steps: result.next_steps,
-    generated_files: result.generated_files,
-  });
+    generated_files: result.generated_files || [],
+  };
 }
 
-function renderOutput(data) {
-  const output = $("output");
-  output.className = "output-card";
-  output.dataset.renderState = JSON.stringify(data);
+function renderProjectOutput(data) {
+  renderDetailsOutput("project_output", data);
+}
+
+function renderDetailsOutput(id, data) {
+  const output = $(id);
   if (data.status === "working") {
     output.innerHTML = `<p>${escapeHTML(data.message)}</p>`;
     return;
@@ -694,16 +747,13 @@ function renderOutput(data) {
     return;
   }
   const files = data.generated_files || [];
-  const steps = data.next_steps || [];
   output.innerHTML = `
     <dl>
       ${field(t("status"), data.status || "success")}
-      ${field(t("project_slug"), data.project_slug || data.slug)}
+      ${field(t("project_slug"), data.project_slug)}
       ${field(t("template"), data.project_template)}
-      ${field(t("project_path"), data.project_path || data.path)}
-      ${field(t("review_summary"), data.review_summary)}
+      ${field(t("project_path"), data.project_path)}
     </dl>
-    ${steps.length ? `<h3>${escapeHTML(t("next_steps"))}</h3><ul>${steps.map((step) => `<li>${escapeHTML(step)}</li>`).join("")}</ul>` : ""}
     ${files.length ? `<h3>${escapeHTML(t("generated_files"))}</h3><ul class="file-list">${files.map((file) => `<li>${escapeHTML(file)}</li>`).join("")}</ul>` : ""}
   `;
 }

@@ -104,10 +104,8 @@ h3 {
 }
 
 .project-panel,
-.godot-panel,
 .assets-panel,
-.hastur-panel,
-.output-panel {
+.hastur-panel {
   grid-column: 2;
 }
 
@@ -307,7 +305,6 @@ button.compact {
   white-space: nowrap;
 }
 
-.output-empty,
 .output-card,
 .mini-output {
   min-height: 220px;
@@ -327,6 +324,11 @@ button.compact {
   white-space: pre-wrap;
   font-family: Consolas, "Courier New", monospace;
   font-size: 12px;
+}
+
+.compact-output {
+  min-height: 0;
+  max-height: 300px;
 }
 
 .asset-gallery {
@@ -417,10 +419,8 @@ dd {
   }
 
   .project-panel,
-  .godot-panel,
   .assets-panel,
   .hastur-panel,
-  .output-panel,
   .settings-panel,
   .recent-panel {
     grid-column: 1;

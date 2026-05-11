@@ -1,8 +1,8 @@
 # AI Game Development Agent
 
-Language / 语言:
+Language:
 
-- [中文](README.zh-CN.md)
+- [Chinese](README.zh-CN.md)
 - [English](README.en.md)
 
-This repository contains the v0.2.1 MVP of an application-layer AI game development agent for Godot prototypes. It includes one-click Windows/macOS bootstrap scripts, a FastAPI dashboard, local API key settings, and 2D/3D Godot prototype generators.
+This repository contains a local FastAPI control plane for Godot prototypes. The dashboard creates standalone Godot projects with the vendored Hastur editor plugin enabled, initializes Git, manages local LLM/image API settings, generates image assets, and exchanges safe structured operations with a local Hastur broker.

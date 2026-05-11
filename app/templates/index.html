@@ -10,8 +10,8 @@
   <header class="app-header">
     <div>
       <p class="eyebrow" data-i18n="eyebrow">Godot prototype workflow</p>
-      <h1>AI Game Development Agent</h1>
-      <p class="header-note" data-i18n="header_note">Startup only opens this dashboard. The agent creates projects only after you submit a workflow.</p>
+      <h1 data-i18n="app_title">AI Game Development Agent</h1>
+      <p class="header-note" data-i18n="header_note">Create Godot prototypes, generate assets, and operate Godot through a local Hastur broker.</p>
     </div>
     <div class="header-actions">
       <div class="language-toggle" aria-label="Language">
@@ -33,23 +33,68 @@
         <span data-i18n="llm_provider">LLM Provider</span>
         <select id="provider">
           <option value="mock">mock</option>
-          <option value="openai">openai</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="openai_compatible">OpenAI-compatible</option>
+          <option value="local_openai_compatible">Local OpenAI-compatible</option>
         </select>
       </label>
 
       <label>
-        <span data-i18n="openai_model">OpenAI Text Model</span>
-        <select id="model">
-          <option value="gpt-4.1-mini">gpt-4.1-mini</option>
-          <option value="gpt-4.1">gpt-4.1</option>
-          <option value="gpt-4o-mini">gpt-4o-mini</option>
-          <option value="gpt-4o">gpt-4o</option>
-        </select>
+        <span data-i18n="llm_model">Text Model</span>
+        <input id="model" list="llm_model_suggestions" autocomplete="off" placeholder="gpt-5.4-mini">
+        <datalist id="llm_model_suggestions">
+          <option value="gpt-5.5"></option>
+          <option value="gpt-5.4"></option>
+          <option value="gpt-5.4-mini"></option>
+          <option value="claude-opus-4-20250514"></option>
+          <option value="claude-sonnet-4-20250514"></option>
+          <option value="deepseek-v4-flash"></option>
+          <option value="deepseek-v4-pro"></option>
+        </datalist>
       </label>
 
       <label>
-        <span data-i18n="openai_key">OpenAI API Key</span>
+        <span data-i18n="llm_base_url">LLM Base URL</span>
+        <input id="llmBaseUrl" autocomplete="off" placeholder="https://api.openai.com/v1">
+      </label>
+
+      <label>
+        <span data-i18n="llm_key">LLM API Key</span>
         <input id="apiKey" type="password" autocomplete="off" placeholder="sk-...">
+      </label>
+
+      <label>
+        <span data-i18n="image_provider">Image Provider</span>
+        <select id="settings_image_provider">
+          <option value="mock">mock</option>
+          <option value="openai">OpenAI</option>
+          <option value="openai_compatible">OpenAI-compatible</option>
+        </select>
+      </label>
+
+      <label>
+        <span data-i18n="image_model">Image Model</span>
+        <input id="settings_image_model" list="image_model_suggestions" autocomplete="off" placeholder="gpt-image-2">
+        <datalist id="image_model_suggestions">
+          <option value="gpt-image-2"></option>
+          <option value="gpt-image-2-2026-04-21"></option>
+          <option value="gpt-image-1.5"></option>
+          <option value="gpt-image-1"></option>
+          <option value="gpt-image-1-mini"></option>
+          <option value="dall-e-3"></option>
+        </datalist>
+      </label>
+
+      <label>
+        <span data-i18n="image_base_url">Image Base URL</span>
+        <input id="imageBaseUrl" autocomplete="off" placeholder="https://api.openai.com/v1">
+      </label>
+
+      <label>
+        <span data-i18n="image_key">Image API Key</span>
+        <input id="imageApiKey" type="password" autocomplete="off" placeholder="sk-...">
       </label>
 
       <div class="button-row">
@@ -61,22 +106,17 @@
 
     <section class="panel project-panel" aria-labelledby="project-title">
       <div class="panel-heading">
-        <h2 id="project-title" data-i18n="create_project">Create Project</h2>
-        <span class="muted" data-i18n="templates_badge">v0.3 workflow</span>
+        <h2 id="project-title" data-i18n="godot_project_title">Godot Project</h2>
+        <span class="muted" data-i18n="godot_project_badge">auto Hastur addon</span>
       </div>
-      <p class="panel-note" data-i18n="project_note">This form starts the AI workflow: LLM planning, documentation, and optional Godot prototype generation.</p>
-
-      <label>
-        <span data-i18n="project_name">Project Name</span>
-        <input id="project_name" autocomplete="off" data-i18n-placeholder="project_name_placeholder" placeholder="Example: Shadow Garden">
-      </label>
-
-      <label>
-        <span data-i18n="game_idea">Game Idea / GDD</span>
-        <textarea id="game_idea" rows="5" data-i18n-placeholder="game_idea_placeholder" placeholder="Describe the game you want the AI agent to build..."></textarea>
-      </label>
+      <p class="panel-note" data-i18n="godot_project_note">Create a Godot project with Hastur copied, enabled, and committed to a fresh Git repository.</p>
 
       <div class="form-grid">
+        <label>
+          <span data-i18n="project_name">Project Name</span>
+          <input id="project_name" autocomplete="off" data-i18n-placeholder="project_name_placeholder" placeholder="Example: Shadow Garden">
+        </label>
+
         <label>
           <span data-i18n="godot_template">Godot Project Template</span>
           <select id="project_template">
@@ -109,70 +149,6 @@
         </label>
 
         <label>
-          <span data-i18n="prototype_scope">Prototype Scope</span>
-          <select id="prototype_scope">
-            <option value="vertical slice" data-i18n="scope_vertical">vertical slice</option>
-            <option value="mechanics prototype" data-i18n="scope_mechanics">mechanics prototype</option>
-            <option value="playable demo" data-i18n="scope_demo">playable demo</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="checks">
-        <label><input id="enable_git" type="checkbox" checked> <span data-i18n="enable_git">Enable Git</span></label>
-        <label><input id="generate_docs" type="checkbox" checked> <span data-i18n="generate_docs">Generate Documentation</span></label>
-        <label><input id="generate_godot_skeleton" type="checkbox" checked> <span data-i18n="generate_godot">Generate Godot Prototype</span></label>
-      </div>
-
-      <button type="button" class="primary" onclick="createProject()" data-i18n="create_button">Run AI Project Generation</button>
-      <p id="projectMessage" class="message" role="status"></p>
-    </section>
-
-    <section class="panel godot-panel" aria-labelledby="godot-project-title">
-      <div class="panel-heading">
-        <h2 id="godot-project-title" data-i18n="godot_project_title">Godot Project</h2>
-        <span class="muted" data-i18n="godot_project_badge">auto Hastur addon</span>
-      </div>
-      <p class="panel-note" data-i18n="godot_project_note">Create a Godot project with the Hastur editor plugin copied and enabled automatically.</p>
-
-      <div class="form-grid">
-        <label>
-          <span data-i18n="project_name">Project Name</span>
-          <input id="godot_project_name" autocomplete="off" data-i18n-placeholder="project_name_placeholder" placeholder="Example: Shadow Garden">
-        </label>
-
-        <label>
-          <span data-i18n="godot_template">Godot Project Template</span>
-          <select id="godot_project_template">
-            <option value="2d" data-i18n="template_2d">2D Game Prototype</option>
-            <option value="3d" data-i18n="template_3d">3D Game Prototype</option>
-          </select>
-        </label>
-
-        <label>
-          <span data-i18n="game_type">Game Type</span>
-          <select id="godot_game_type">
-            <option value="2D top-down action">2D top-down action</option>
-            <option value="2D platformer">2D platformer</option>
-            <option value="2D card game">2D card game</option>
-            <option value="visual novel">visual novel</option>
-            <option value="3D exploration">3D exploration</option>
-            <option value="3D first-person prototype">3D first-person prototype</option>
-            <option value="3D third-person prototype">3D third-person prototype</option>
-          </select>
-        </label>
-
-        <label>
-          <span data-i18n="engine_version">Engine Version</span>
-          <select id="godot_engine">
-            <option value="Godot 4">Godot 4</option>
-            <option value="Godot 4.2">Godot 4.2</option>
-            <option value="Godot 4.3">Godot 4.3</option>
-            <option value="Godot 4.4">Godot 4.4</option>
-          </select>
-        </label>
-
-        <label>
           <span data-i18n="broker_host">Broker Host</span>
           <input id="godot_broker_host" value="localhost">
         </label>
@@ -183,8 +159,13 @@
         </label>
       </div>
 
-      <button type="button" class="primary" onclick="createGodotProject()" data-i18n="create_godot_project">Create Godot Project</button>
-      <p id="godotProjectMessage" class="message" role="status"></p>
+      <div class="checks">
+        <label><input id="enable_git" type="checkbox" checked> <span data-i18n="enable_git">Initialize Git</span></label>
+      </div>
+
+      <button type="button" class="primary" onclick="createProject()" data-i18n="create_godot_project">Create Godot Project</button>
+      <p id="projectMessage" class="message" role="status"></p>
+      <div id="project_output" class="mini-output compact-output"></div>
     </section>
 
     <section class="panel recent-panel" aria-labelledby="recent-title">
@@ -194,12 +175,13 @@
       </div>
       <p class="panel-note" data-i18n="recent_note">These are existing generated projects. Startup does not create new projects.</p>
       <ul id="recent_projects" class="project-list"></ul>
+      <div id="recent_project_details" class="mini-output compact-output"></div>
     </section>
 
     <section class="panel assets-panel" aria-labelledby="assets-title">
       <div class="panel-heading">
         <h2 id="assets-title" data-i18n="assets_title">Assets</h2>
-        <span class="muted" data-i18n="assets_badge">Image-2 pipeline</span>
+        <span class="muted" data-i18n="assets_badge">image pipeline</span>
       </div>
       <p class="panel-note" data-i18n="assets_note">Generate concept art, GDD references, 2D drafts, UI icons, texture references, or Blender reference images for an existing project.</p>
 
@@ -207,24 +189,6 @@
         <label>
           <span data-i18n="asset_project">Project</span>
           <select id="asset_project_slug"></select>
-        </label>
-
-        <label>
-          <span data-i18n="image_provider">Image Provider</span>
-          <select id="image_provider">
-            <option value="mock">mock</option>
-            <option value="openai">openai</option>
-          </select>
-        </label>
-
-        <label>
-          <span data-i18n="image_model">Image Model</span>
-          <select id="image_model">
-            <option value="gpt-image-2">gpt-image-2</option>
-            <option value="gpt-image-2-2026-04-21">gpt-image-2-2026-04-21</option>
-            <option value="gpt-image-1">gpt-image-1</option>
-            <option value="dall-e-3">dall-e-3</option>
-          </select>
         </label>
 
         <label>
@@ -264,7 +228,7 @@
       </label>
 
       <div class="button-row">
-        <button type="button" onclick="saveAssetSettings()" data-i18n="save_asset_settings">Save Image Settings</button>
+        <button type="button" onclick="saveAssetSettings()" data-i18n="save_asset_settings">Save Image Defaults</button>
         <button type="button" class="secondary" onclick="generateImageAsset()" data-i18n="generate_image">Generate Image</button>
       </div>
       <p id="assetMessage" class="message" role="status"></p>
@@ -339,14 +303,6 @@
         <button type="button" class="secondary" onclick="planAndExecuteGodotOperation()" data-i18n="plan_and_execute">Plan and Execute</button>
       </div>
       <div id="hastur_output" class="mini-output"></div>
-    </section>
-
-    <section class="panel output-panel" aria-labelledby="output-title">
-      <div class="panel-heading">
-        <h2 id="output-title" data-i18n="output">Output</h2>
-        <span class="muted" data-i18n="output_badge">Generation result and errors</span>
-      </div>
-      <div id="output" class="output-empty" data-i18n="output_empty">No project created yet.</div>
     </section>
   </main>
 
