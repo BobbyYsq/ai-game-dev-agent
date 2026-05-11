@@ -10,6 +10,7 @@ SETTINGS_FILE = SETTINGS_DIR / "settings.json"
 HASTUR_PROJECT_DIR = PROJECT_ROOT / "hastur-operation-plugin-main"
 HASTUR_ADDON_DIR = HASTUR_PROJECT_DIR / "addons" / "hasturoperationgd"
 HASTUR_BROKER_DIR = HASTUR_PROJECT_DIR / "broker-server"
+HASTUR_SKILLS_DIR = HASTUR_PROJECT_DIR / ".claude" / "skills"
 HASTUR_LICENSE_FILE = HASTUR_PROJECT_DIR / "LICENSE"
 
 

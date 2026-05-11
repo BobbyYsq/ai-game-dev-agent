@@ -60,6 +60,8 @@ class HasturExecutePayload(BaseModel):
     code: str
     project_path: str
     executor_id: str | None = None
+    project_name: str | None = None
+    type: str | None = None
 
 
 def get_hastur_settings() -> dict[str, Any]:
@@ -216,3 +218,41 @@ def apply_hastur_operation(project_slug: str, operation: GodotOperation, executo
             )
     except httpx.HTTPError as exc:
         return HasturExecuteResult(success=False, message=f"Hastur execute failed: {exc}", gdscript=gdscript)
+
+
+def apply_hastur_code(
+    project_slug: str,
+    code: str,
+    executor_id: str | None = None,
+    executor_type: str | None = None,
+) -> HasturExecuteResult:
+    project_dir = get_project_dir(project_slug)
+    settings = get_hastur_settings()
+    if not settings["enabled"]:
+        return HasturExecuteResult(success=False, message="Hastur bridge is disabled.")
+    payload = HasturExecutePayload(
+        code=code,
+        project_path=str(project_dir),
+        executor_id=executor_id,
+        type=executor_type,
+    )
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(
+                f"{settings['base_url']}/api/execute",
+                headers=build_headers(settings),
+                json=payload.model_dump(exclude_none=True),
+            )
+            response.raise_for_status()
+            try:
+                broker_response = response.json()
+            except ValueError:
+                broker_response = response.text
+            return HasturExecuteResult(
+                success=True,
+                message="Hastur skill code executed.",
+                broker_response=broker_response,
+                gdscript=code,
+            )
+    except httpx.HTTPError as exc:
+        return HasturExecuteResult(success=False, message=f"Hastur execute failed: {exc}", gdscript=code)

@@ -90,7 +90,7 @@ def generate_image_asset(
         raise ValueError(f"Unsupported image purpose: {purpose}")
     project_dir = get_project_dir(project_slug)
     settings = load_private_settings()
-    image_model = model or settings.get("openai_image_model", "gpt-image-2")
+    image_model = model or settings.get("openai_image_model", "gpt-image-1")
     provider = get_image_provider()
     generated = provider.generate_image(prompt=prompt, model=image_model, size=size, quality=quality)
 

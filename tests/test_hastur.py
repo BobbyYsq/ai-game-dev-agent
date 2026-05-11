@@ -1,7 +1,6 @@
 import pytest
 
 from app.agent.godot_operation_planner import parse_operation_plan
-from app.models.mock_provider import MockLLMProvider
 from app.services.hastur_service import GodotOperation, build_gdscript
 
 
@@ -38,8 +37,8 @@ def test_parse_operation_plan_validates_operations():
     assert len(plan.operations) == 2
 
 
-def test_mock_llm_returns_valid_operation_plan_for_planner_prompt():
-    raw = MockLLMProvider().generate_text("Return only JSON\nAllowed operation values:")
+def test_planner_json_fixture_returns_valid_operation_plan():
+    raw = '{"operations": [{"operation": "open_scene", "target_scene": "res://scenes/Main.tscn"}]}'
     plan = parse_operation_plan(raw)
 
     assert plan.operations[0].operation == "open_scene"

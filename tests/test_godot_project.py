@@ -18,9 +18,11 @@ def test_create_godot_project_installs_and_enables_hastur(tmp_path, monkeypatch)
     project_godot = (project / "project.godot").read_text(encoding="utf-8")
     assert result.success is True
     assert (project / "addons/hasturoperationgd/plugin.cfg").exists()
+    assert (project / "scenes/Main.tscn").exists()
     assert 'enabled=PackedStringArray("res://addons/hasturoperationgd/plugin.cfg")' in project_godot
     assert 'broker_host="localhost"' in project_godot
     assert "broker_port=5301" in project_godot
+    assert "[input]" not in project_godot
     assert (project / "THIRD_PARTY_NOTICES.md").exists()
     assert (project / "licenses/HASTUR_OPERATION_PLUGIN_LICENSE.md").exists()
 

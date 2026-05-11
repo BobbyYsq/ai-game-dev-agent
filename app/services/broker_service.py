@@ -6,6 +6,7 @@ import secrets
 import shutil
 import subprocess
 import threading
+import re
 from typing import Any
 
 from app.config import HASTUR_BROKER_DIR
@@ -35,6 +36,22 @@ def _command(name: str) -> str:
 def _append_log(line: str) -> None:
     with _lock:
         _logs.append(line.rstrip())
+    _capture_auth_token(line)
+
+
+def _capture_auth_token(line: str) -> None:
+    match = re.search(r"(?:Auto-generated auth token|auth token):\s*([A-Za-z0-9._-]{16,})", line, re.IGNORECASE)
+    if not match:
+        return
+    settings = load_private_settings()
+    settings.update(
+        {
+            "hastur_enabled": True,
+            "hastur_auth_token": match.group(1),
+            "hastur_target_mode": "project_path",
+        }
+    )
+    save_private_settings(settings)
 
 
 def _read_output(process: subprocess.Popen) -> None:

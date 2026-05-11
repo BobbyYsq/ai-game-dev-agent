@@ -27,7 +27,7 @@ class FakeCompleted:
     stderr = ""
 
 
-def test_broker_start_and_stop_with_mocked_process(tmp_path, monkeypatch):
+def test_broker_start_and_stop_with_fake_process(tmp_path, monkeypatch):
     settings_file = tmp_path / "settings.json"
     monkeypatch.setattr(broker_service, "_process", None)
     monkeypatch.setattr(broker_service, "_command", lambda name: name)
@@ -47,3 +47,14 @@ def test_broker_start_and_stop_with_mocked_process(tmp_path, monkeypatch):
 
     assert stopped["success"] is True
     assert stopped["status"]["running"] is False
+
+
+def test_broker_captures_printed_auth_token(tmp_path, monkeypatch):
+    settings_file = tmp_path / "settings.json"
+    monkeypatch.setattr("app.services.settings_service.SETTINGS_FILE", settings_file)
+    monkeypatch.setattr("app.services.broker_service.SETTINGS_FILE", settings_file, raising=False)
+
+    broker_service._append_log("Auto-generated auth token: abcdef1234567890abcdef1234567890")
+
+    status = broker_service.broker_status()
+    assert status["has_auth_token"] is True

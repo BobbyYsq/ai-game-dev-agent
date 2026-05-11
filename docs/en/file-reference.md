@@ -1,69 +1,48 @@
-# File and Function Reference
+# File Reference
 
-## Root
+## App Entrypoints
 
-- `start_windows.cmd`: Windows double-click entrypoint.
-- `start_macos.command`: macOS entrypoint.
-- `environment.yml`: Micromamba environment definition.
-- `requirements.txt`: Python package list used by the environment.
-
-## Bootstrap
-
-- `bootstrap/bootstrap_windows.ps1`: downloads Micromamba, creates runtime env, finds a port, starts FastAPI on Windows.
-- `bootstrap/bootstrap_macos.sh`: same workflow for macOS with architecture detection.
-- `bootstrap/README_BOOTSTRAP.md`: explains the local runtime layout.
-
-## App Entry
-
-- `app/main.py`
-  - `create_app()`: creates FastAPI, mounts `/static`, registers routers, and renders `/`.
-- `app/config.py`
-  - `ensure_workspace_dirs()`: creates workspace directories.
+- `app/main.py`: FastAPI app creation, static files, templates, and route registration.
+- `app/templates/index.html`: dashboard structure for Manage, LLM + Hastur, and Image Pipeline.
+- `app/static/js/app.js`: dashboard state, API calls, skill picker, chat, image gallery, and Git workbench.
+- `app/static/css/app.css`: responsive operational UI styling.
 
 ## API Routes
 
-- `app/api/routes_settings.py`
-  - `get_settings()`: returns public settings.
-  - `save_settings()`: saves provider/model/key values.
-  - `test_llm_connection()`: calls the active provider.
-- `app/api/routes_projects.py`
-  - `create_project()`: validates template and creates a project.
-  - `list_projects()`: lists recent generated project folders.
-  - `get_project()`: returns files for one generated project.
+- `app/api/routes_settings.py`: public settings, save settings, test LLM.
+- `app/api/routes_godot_projects.py`: blank Godot project creation.
+- `app/api/routes_projects.py`: generated project listing and details.
+- `app/api/routes_hastur.py`: broker controls, skills, executors, chat, and structured operations.
+- `app/api/routes_assets.py`: image generation, asset files, GDD attach, Blender reference.
+- `app/api/routes_git.py`: project-local Git status, review, diff, log, commit, rollback.
 
 ## Services
 
-- `app/services/settings_service.py`
-  - `load_private_settings()`: reads local settings.
-  - `save_private_settings()`: writes local settings.
-  - `get_public_settings()`: hides API key value.
-  - `update_settings()`: merges UI updates.
-- `app/services/project_service.py`
-  - `slugify()`: converts names to folder-safe slugs.
-  - `create_ai_game_project()`: orchestrates docs, Godot files, review, and Git.
-- `app/services/git_service.py`
-  - `init_repo()`: runs `git init`.
-  - `commit_all()`: stages and commits generated files.
+- `app/services/settings_service.py`: local private settings, provider inference, public settings.
+- `app/services/godot_project_service.py`: blank Hastur-enabled Godot project creation.
+- `app/services/hastur_chat_service.py`: LLM + Hastur chat prompt, attachments, confirmation, execution.
+- `app/services/hastur_skill_service.py`: vendored Hastur skill discovery.
+- `app/services/hastur_service.py`: safe structured operation validation and broker execution.
+- `app/services/broker_service.py`: managed local Hastur broker process.
+- `app/services/asset_service.py`: generated images, manifests, GDD links, Blender notes.
+- `app/services/git_service.py`: generated-project Git helper commands.
 
-## Generators
+## Provider Adapters
 
-- `app/tools/godot_project_tools.py`
-  - `generate_godot_template_project()`: dispatches `2d` or `3d` generation.
-- `app/tools/godot_templates/base.py`: shared folder, project file, and script helpers.
-- `app/tools/godot_templates/template_2d.py`: writes the playable 2D template.
-- `app/tools/godot_templates/template_3d.py`: writes the playable 3D template.
-## v0.3 Added Files
+- `app/models/openai_provider.py`: OpenAI-compatible chat, vision, and Anthropic adapter.
+- `app/models/llm_provider.py`: selects the active text provider from saved settings.
+- `app/models/image_provider.py`: selects the active image provider from saved settings.
 
-- `app/models/image_provider.py`: `MockImageProvider`, `OpenAIImageProvider`, and `get_image_provider()` for image generation.
-- `app/services/asset_service.py`: creates image assets, writes `asset_manifest.json`, appends images to `GDD.md`, and writes Blender reference notes.
-- `app/api/routes_assets.py`: exposes image generation, asset listing, asset file serving, GDD attachment, and Blender reference endpoints.
-- `app/services/hastur_service.py`: defines `GodotOperation`, validates required fields, builds safe GDScript snippets, checks Hastur status, lists executors, and applies operations.
-- `app/services/broker_service.py`: manages the local Hastur broker process and captures logs.
-- `app/services/godot_project_service.py`: creates standalone Godot projects with automatic Hastur addon integration.
-- `app/services/godot_operation_service.py`: asks the configured LLM for operation plans, validates them, and executes validated plans.
-- `app/api/routes_hastur.py`: exposes Hastur status, executor, and structured operation endpoints.
-- `app/api/routes_godot_projects.py`: exposes standalone Godot project creation.
-- `app/agent/godot_operation_planner.py`: validates future LLM-produced Godot operation plans.
-- `AGENTS.md`: AI-facing project context and required workflow rules.
-- `THIRD_PARTY_NOTICES.md`: root third-party license notice for the vendored Hastur Operation Plugin.
-- `tests/test_assets.py`, `tests/test_hastur.py`, `tests/test_settings.py`: smoke coverage for v0.3 services.
+## Godot Generation
+
+- `app/tools/godot_templates/base.py`: minimal `project.godot`, `Main.tscn`, folders, and Hastur addon installation.
+- `app/tools/godot_templates/template_2d.py`: 2D prototype template.
+- `app/tools/godot_templates/template_3d.py`: 3D prototype template.
+
+## Tests
+
+- `tests/test_settings.py`: provider inference and public settings.
+- `tests/test_assets.py`: generated asset manifest and document links.
+- `tests/test_hastur.py`: structured operation validation and GDScript construction.
+- `tests/test_hastur_skills.py`: skill discovery and token hiding in chat.
+- `tests/test_git_service.py`: local Git status and confirmation-gated rollback.

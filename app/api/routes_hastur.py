@@ -3,7 +3,9 @@ from pydantic import BaseModel
 from typing import Any
 
 from app.services.broker_service import broker_logs, broker_status, start_broker, stop_broker
+from app.services.hastur_chat_service import chat_with_hastur_skill
 from app.services.hastur_service import GodotOperation, apply_hastur_operation, hastur_executors, hastur_status
+from app.services.hastur_skill_service import list_hastur_skills
 from app.services.godot_operation_service import execute_godot_operation_plan, plan_godot_operations
 
 router = APIRouter()
@@ -29,6 +31,21 @@ class BrokerStartRequest(BaseModel):
     host: str | None = None
     http_port: int | None = None
     tcp_port: int | None = None
+
+
+class UploadedImage(BaseModel):
+    filename: str
+    media_type: str
+    data: str
+
+
+class HasturChatRequest(BaseModel):
+    instruction: str
+    skill_name: str = "godot-remote-executor"
+    execute: bool = True
+    confirmed: bool = False
+    images: list[UploadedImage] = []
+    attachments: list[UploadedImage] = []
 
 
 @router.get("/api/hastur/broker/status")
@@ -62,6 +79,33 @@ def get_hastur_status():
 @router.get("/api/hastur/executors")
 def get_hastur_executors():
     return hastur_executors()
+
+
+@router.get("/api/hastur/skills")
+def get_hastur_skills():
+    return {"skills": [skill.__dict__ for skill in list_hastur_skills()]}
+
+
+@router.post("/api/projects/{project_slug}/hastur/chat")
+def chat_with_hastur(project_slug: str, payload: HasturChatRequest):
+    if not payload.instruction.strip():
+        raise HTTPException(status_code=422, detail="instruction is required")
+    try:
+        return chat_with_hastur_skill(
+            project_slug=project_slug,
+            instruction=payload.instruction.strip(),
+            skill_name=payload.skill_name,
+            images=[image.model_dump() for image in payload.images],
+            attachments=[attachment.model_dump() for attachment in payload.attachments],
+            execute=payload.execute,
+            confirmed=payload.confirmed,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Hastur chat failed: {exc}") from exc
 
 
 @router.post("/api/projects/{project_slug}/hastur/apply-operation")

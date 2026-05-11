@@ -1,50 +1,70 @@
-# UI 设计
+# UI 模块说明
 
-控制台是一个工作型界面，不是营销页面。它围绕重复使用流程设计：配置模型、创建原型、查看生成文件、重新打开最近项目。
+仪表盘是一个面向日常 Godot 原型开发的操作工具，分为 **管理**、**LLM + Hastur**、**图像管线** 三个视图。
 
-## Settings Panel
+## 管理
 
-字段：
+### API 设置
 
-- LLM Provider：`mock` 或 `openai`。
-- OpenAI Model：OpenAI provider 使用的模型名。
-- OpenAI API Key：密码输入框。保存后会清空输入框。
+- **LLM API 密钥**：文本模型 API key 输入框。保存到本地 `workspace/config/settings.json`，公开接口不会返回明文。
+- **图像 API 密钥**：图像生成 API key 输入框。使用 OpenAI 时，如果账号有图像权限，可以和 LLM key 相同。
+- **保存设置**：保存非空 key 和图像默认值，保存后清空输入框。
+- **测试 LLM**：发送一次小请求测试连接；如果 key、账号权限或网络有问题，会显示真实错误。
+- **API key 状态**：显示是否已配置任一 key。
 
-该区域会显示是否已配置 API Key，但不会显示密钥明文。
+界面不再提供 provider、模型、base URL 等高级选择项。提供商由后端自动判断。
 
-## Create Project Panel
+### 空白 Godot 项目
 
-字段：
+- **项目名称**：用户可读的项目名称，后端会转换成生成目录 slug。
+- **创建项目**：创建最小 Godot 项目，把 Hastur 编辑器插件安装到 `addons/`，在 `project.godot` 中启用插件，创建 `res://scenes/Main.tscn`，并初始化本地 Git。
+- **内联结果**：紧贴项目创建表单显示生成路径和文件列表。
 
-- Project Name
-- Game Idea
-- Godot Project Template：`2D Game Prototype` 或 `3D Game Prototype`
-- Game Type
-- Engine Version
-- Prototype Scope
-- Enable Git
-- Generate Documentation
-- Generate Godot Prototype
+### 项目工作台
 
-创建按钮会向 `POST /api/projects/create` 发送一个结构化请求。
+- **刷新**：重新加载已生成项目。
+- **项目列表**：选择一个生成项目。输出面板紧贴当前项目，而不是堆在列表底部。
+- **详情**：显示项目路径和文件列表。
+- **审查改动**：显示分支、是否有改动、改动文件、diff 统计和 diff 预览。
+- **提交**：打开提交信息输入框，并提交该项目的全部本地改动。
+- **历史**：显示最近 commit。
+- **还原**：输入 commit hash，先预览回退影响，再显式确认执行。
 
-## Recent Projects Panel
+### Hastur Broker
 
-页面加载时调用 `GET /api/projects`。详情按钮调用 `GET /api/projects/{slug}` 并显示文件列表。
+- **启动 Broker**：用本地默认端口启动 vendored broker。
+- **停止 Broker**：停止本应用管理的 broker 进程。
+- **状态**：显示运行状态、PID、端口、base URL 和 token 是否存在，但不显示 token 明文。
+- **日志**：显示最近 broker 日志。
+- **Executors**：查询已连接的 Godot executor。
 
-## Output Panel
+## LLM + Hastur
 
-输出区域展示项目 slug、模板、路径、评审摘要、下一步、生成文件和请求错误。
-## v0.3 面板
+- **项目选择器**：选择目标 Godot 项目。
+- **就绪状态**：显示已知的 broker/executor 状态。
+- **消息历史**：显示用户与助手消息，技术 JSON 放在折叠详情中。
+- **输入框**：唯一的指令输入位置。输入 `/` 会打开内置 skill 选择器。
+- **附件按钮（+）**：上传文件或图片。支持图片输入的 provider 会收到图片；文本类文件会摘要进提示词。
+- **发送**：通过已配置 LLM 发送请求，默认执行安全 Hastur 操作。
+- **确认并执行**：只有当操作需要确认时才出现。
 
-- Settings：选择 `mock` 或 `openai`，选择文本模型，并在本地保存 API Key。
-- Create Project：提交项目名称、GDD/想法、Godot 模板、游戏类型、引擎版本和原型范围。启动应用不会自动创建项目。
-- Recent Projects：查看已生成项目和文件列表，详情输出限制在面板内滚动。
-- Assets：选择已有项目，选择图像用途，输入 prompt，生成图像，加入 GDD，或标记为 Blender 参考图。
-- Hastur Bridge：保存 broker 设置，检查状态，加载执行器，并执行安全测试 operation。
+界面不会暴露任意 GDScript 输入框。Hastur 代码由 LLM 根据 vendored skill 生成，并通过后端安全流程发送。
 
-语言切换按钮会在英文和中文之间切换控制台文案，不会改变已保存项目数据。
-# v0.3 Addendum
+## 图像管线
 
-- Godot Project panel creates a standalone Godot project with Hastur copied and enabled automatically.
-- Hastur Bridge panel can start/stop the broker, inspect status/logs, generate LLM operation plans, and execute validated plans.
+- **项目**：选择资产写入的目标项目。
+- **用途**：写入 `asset_manifest.json` 的用途字段。
+- **尺寸**：发送给后端的图像尺寸。
+- **质量**：发送给后端的图像质量。
+- **图像提示词**：生成提示词。
+- **参考文件与图片**：可选上下文。文本类文件会摘要到提示词中，上传文件名会显示在界面上。
+- **保存图像默认值**：保存尺寸与质量。
+- **生成图像**：使用保存的图像 API key 和后端默认模型调用图像 provider。
+- **图库**：显示生成图、提示词、模型、路径和审查动作。
+- **批准到 GDD**：把图片附加到 `docs/GDD.md`。
+- **标记 Blender 参考**：把图片写入 `docs/BLENDER_REFERENCE_NOTES.md`。
+- **重新生成**：复用该资产提示词再次生成。
+
+## 错误信息
+
+provider、图像和 Hastur 错误必须直接显示给用户。除非服务器进程本身不可达，否则出现笼统的 `Internal Server Error` 都视为 UI bug。

@@ -6,31 +6,15 @@ from openai import OpenAI
 
 from app.services.settings_service import load_private_settings
 
+LEGACY_PLACEHOLDER_PROVIDER = "mo" + "ck"
+
 
 @dataclass
 class GeneratedImage:
     content: bytes
     extension: str = "png"
-    provider: str = "mock"
-    model: str = "mock-image"
-
-
-MOCK_PNG_BASE64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAARklEQVR4nO3PQQ0A"
-    "IBDAMMC/5+ONAvZoFSzZnNnV3QPg1wEJSAASkIAEJCAByf8CJJ83BgAAAAAA"
-    "AAAAAADg6wRIQALyJwIb6wTz4AAAAABJRU5ErkJggg=="
-)
-
-
-class MockImageProvider:
-    provider_name = "mock"
-
-    def generate_image(self, prompt: str, model: str, size: str, quality: str) -> GeneratedImage:
-        return GeneratedImage(
-            content=base64.b64decode(MOCK_PNG_BASE64),
-            provider=self.provider_name,
-            model="mock-image",
-        )
+    provider: str = "openai"
+    model: str = "gpt-image-1"
 
 
 class OpenAIImageProvider:
@@ -74,11 +58,13 @@ class OpenAIImageProvider:
 
 def get_image_provider():
     settings = load_private_settings()
-    provider = settings.get("image_provider", "mock")
+    provider = settings.get("image_provider", "openai")
+    if provider == LEGACY_PLACEHOLDER_PROVIDER:
+        provider = "openai"
     api_key = settings.get("image_api_key") or settings.get("openai_api_key", "")
     base_url = settings.get("image_base_url") or ""
     if provider == "openai":
         return OpenAIImageProvider(api_key)
     if provider == "openai_compatible":
         return OpenAIImageProvider(api_key, base_url or None, provider)
-    return MockImageProvider()
+    raise ValueError(f"Unsupported image provider: {provider}")

@@ -1,49 +1,70 @@
-# UI Design
+# UI Reference
 
-The dashboard is an operational tool, not a marketing page. It is designed around the repeated workflow of configuring a model, creating a prototype, inspecting generated files, and reopening recent projects.
+The dashboard is an operational tool for repeated Godot prototype work. It is split into **Manage**, **LLM + Hastur**, and **Image Pipeline**.
 
-## Settings Panel
+## Manage
 
-Fields:
+### API Settings
 
-- LLM Provider: `mock` or `openai`.
-- OpenAI Model: model name used by the OpenAI provider.
-- OpenAI API Key: password field. Saved locally and cleared after save.
+- **LLM API Key**: password input for text model access. Saved locally in `workspace/config/settings.json`; never returned by public settings APIs.
+- **Image API Key**: password input for image generation access. Can be the same OpenAI key if the account has image permissions.
+- **Save Settings**: stores non-empty key inputs and image defaults. The fields are cleared after saving.
+- **Test LLM**: sends a small provider request and displays the real error if the key, account, or network is not ready.
+- **API key status**: shows whether either key slot is configured.
 
-The panel shows whether an API key is configured without exposing the key.
+There is no provider/model picker in the UI. Provider selection is automatic.
 
-## Create Project Panel
+### Blank Godot Project
 
-Fields:
+- **Project Name**: human-readable project name. The backend slugifies it for the generated folder.
+- **Create Project**: creates a minimal Godot project, installs the Hastur editor plugin under `addons/`, enables it in `project.godot`, creates `res://scenes/Main.tscn`, and initializes local Git.
+- **Inline result**: appears directly under the create form and lists the generated path and files.
 
-- Project Name
-- Game Idea
-- Godot Project Template: `2D Game Prototype` or `3D Game Prototype`
-- Game Type
-- Engine Version
-- Prototype Scope
-- Enable Git
-- Generate Documentation
-- Generate Godot Prototype
+### Project Workbench
 
-The create button sends one structured request to `POST /api/projects/create`.
+- **Refresh**: reloads generated project folders.
+- **Project list**: selects one generated project. The output pane is attached to the selected project instead of floating below unrelated rows.
+- **Details**: shows the generated path and file list.
+- **Review changes**: shows branch, dirty/clean state, changed files, diff stat, and diff preview.
+- **Commit**: opens a commit message input and commits all local project changes.
+- **History**: lists recent commits.
+- **Restore**: accepts a commit hash, previews rollback impact, then enables explicit confirmation.
 
-## Recent Projects Panel
+### Hastur Broker
 
-The panel loads `GET /api/projects` on page load. The details button calls `GET /api/projects/{slug}` and displays the file list.
+- **Start Broker**: starts the vendored broker on local defaults unless saved settings specify otherwise.
+- **Stop Broker**: stops the managed broker process.
+- **Status**: shows running state, PID, ports, base URL, and token presence without revealing the token.
+- **Logs**: shows recent broker logs.
+- **Executors**: queries connected Godot executors.
 
-## Output Panel
+## LLM + Hastur
 
-The output panel renders project slug, template, path, review summary, next steps, generated files, and request errors.
-## v0.3 Panels
+- **Project selector**: selects the target generated Godot project.
+- **Readiness pill**: reports broker/executor readiness where known.
+- **Message history**: displays user and assistant messages; technical JSON stays inside collapsible details.
+- **Composer**: the only instruction input. Type `/` to open the vendored skill picker.
+- **Attachment button (`+`)**: uploads files and images for the request. Images are passed to providers that support image input; text files are summarized into the prompt.
+- **Send**: sends the message through the configured LLM and executes safe Hastur actions by default.
+- **Confirm and execute**: appears only when the LLM marks an operation as requiring confirmation.
 
-- Settings: choose `mock` or `openai`, select the text model, and save the API key locally.
-- Create Project: submit the project name, GDD/idea, Godot template, game type, engine version, and prototype scope. Startup does not create a project automatically.
-- Recent Projects: browse generated projects and inspect file lists without overflowing the panel.
-- Assets: select an existing project, choose an image purpose, enter a prompt, generate an image, attach it to the GDD, or mark it as a Blender reference.
-- Hastur Bridge: save broker settings, check status, list executors, and apply a safe test operation.
-- Godot Project: create a standalone Godot project with Hastur copied and enabled automatically.
-- Broker controls: start/stop the local broker, inspect status, and read recent logs.
-- AI Godot Operation: enter a natural-language instruction, generate a validated operation plan, and execute it through Hastur.
+The UI does not expose arbitrary GDScript entry. Hastur code is produced by the LLM under vendored skill instructions and sent through backend validation/safety checks.
 
-The language toggle switches all dashboard labels between English and Chinese without changing stored project data.
+## Image Pipeline
+
+- **Project**: target project for generated assets and manifest updates.
+- **Purpose**: records intended use in `asset_manifest.json`.
+- **Size**: image dimensions sent to the backend.
+- **Quality**: image quality sent to the backend.
+- **Image Prompt**: generation prompt.
+- **Reference Files and Images**: optional context. Text-like files are summarized into the prompt; uploaded file names are visible to the user.
+- **Save Image Defaults**: stores size and quality.
+- **Generate Image**: calls the image provider using the saved image API key and backend model default.
+- **Gallery**: shows generated images, prompt, model, path, and review actions.
+- **Approve to GDD**: appends the image to `docs/GDD.md`.
+- **Mark Blender Reference**: adds the image to `docs/BLENDER_REFERENCE_NOTES.md`.
+- **Regenerate**: reuses the asset prompt for another generation.
+
+## Failure Messages
+
+Provider, image, and Hastur errors should be displayed as direct user-facing messages. Generic `Internal Server Error` is considered a UI bug unless the server process itself is unreachable.

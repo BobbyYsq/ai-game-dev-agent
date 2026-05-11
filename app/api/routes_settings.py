@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.models.llm_provider import get_llm_provider
@@ -38,6 +38,11 @@ def save_settings(payload: SettingsUpdateRequest):
 
 @router.post('/api/settings/test-llm')
 def test_llm_connection():
-    llm = get_llm_provider()
-    _ = llm.generate_text('ping')
-    return {'success': True, 'message': 'LLM connection test succeeded'}
+    try:
+        llm = get_llm_provider()
+        _ = llm.generate_text('ping')
+        return {'success': True, 'message': 'LLM connection test succeeded'}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"LLM connection failed: {exc}") from exc

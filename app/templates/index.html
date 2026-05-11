@@ -9,9 +9,9 @@
 <body>
   <header class="app-header">
     <div>
-      <p class="eyebrow" data-i18n="eyebrow">Godot prototype workflow</p>
+      <p class="eyebrow" data-i18n="eyebrow">Godot control plane</p>
       <h1 data-i18n="app_title">AI Game Development Agent</h1>
-      <p class="header-note" data-i18n="header_note">Create Godot prototypes, generate assets, and operate Godot through a local Hastur broker.</p>
+      <p class="header-note" data-i18n="header_note">Create Hastur-enabled Godot projects, chat with vendored skills, generate references, and review local Git changes.</p>
     </div>
     <div class="header-actions">
       <div class="language-toggle" aria-label="Language">
@@ -22,287 +22,175 @@
     </div>
   </header>
 
-  <main class="layout">
-    <section class="panel settings-panel" aria-labelledby="settings-title">
-      <div class="panel-heading">
-        <h2 id="settings-title" data-i18n="settings_title">Settings</h2>
-        <span id="apiKeyStatus" class="muted" data-i18n="checking_key">Checking key</span>
+  <nav class="app-tabs" aria-label="Main sections">
+    <button type="button" id="tabManage" onclick="showView('manage')" data-i18n="tab_manage">Manage</button>
+    <button type="button" id="tabHastur" onclick="showView('hastur')" data-i18n="tab_hastur">LLM + Hastur</button>
+    <button type="button" id="tabImages" onclick="showView('images')" data-i18n="tab_images">Image Pipeline</button>
+  </nav>
+
+  <main>
+    <section id="viewManage" class="view active">
+      <div class="management-shell">
+        <section class="panel settings-panel" aria-labelledby="settings-title">
+          <div class="panel-heading">
+            <h2 id="settings-title" data-i18n="settings_title">API Settings</h2>
+            <span id="apiKeyStatus" class="muted" data-i18n="checking_key">Checking key</span>
+          </div>
+          <p class="panel-note" data-i18n="settings_note">Paste API keys here. Providers and default models are selected automatically.</p>
+          <label>
+            <span data-i18n="llm_key">LLM API Key</span>
+            <input id="apiKey" type="password" autocomplete="off" placeholder="sk-...">
+          </label>
+          <label>
+            <span data-i18n="image_key">Image API Key</span>
+            <input id="imageApiKey" type="password" autocomplete="off" placeholder="sk-...">
+          </label>
+          <div class="button-row">
+            <button type="button" onclick="saveSettings()" data-i18n="save_settings">Save Settings</button>
+            <button type="button" class="secondary" onclick="testLLM()" data-i18n="test_connection">Test LLM</button>
+          </div>
+          <p id="settingsMessage" class="message" role="status"></p>
+        </section>
+
+        <section class="panel project-panel" aria-labelledby="project-title">
+          <div class="panel-heading">
+            <h2 id="project-title" data-i18n="godot_project_title">Blank Godot Project</h2>
+            <span class="muted" data-i18n="godot_project_badge">Hastur enabled</span>
+          </div>
+          <p class="panel-note" data-i18n="godot_project_note">Create a minimal Godot project with the Hastur editor plugin enabled and local Git initialized.</p>
+          <div class="create-row">
+            <label>
+              <span data-i18n="project_name">Project Name</span>
+              <input id="project_name" autocomplete="off" data-i18n-placeholder="project_name_placeholder" placeholder="Example: Shadow Garden">
+            </label>
+            <button type="button" class="primary" onclick="createProject()" data-i18n="create_godot_project">Create Project</button>
+          </div>
+          <p id="projectMessage" class="message" role="status"></p>
+          <div id="project_output" class="inline-result"></div>
+        </section>
+
+        <section class="panel project-workbench" aria-labelledby="workbench-title">
+          <div class="panel-heading">
+            <h2 id="workbench-title" data-i18n="project_workbench">Project Workbench</h2>
+            <button type="button" class="secondary compact" onclick="loadProjects()" data-i18n="refresh">Refresh</button>
+          </div>
+          <p class="panel-note" data-i18n="workbench_note">Select a generated project, inspect its files, and run a local Codex/OpenCode-style Git review loop.</p>
+          <div class="workbench-layout">
+            <aside>
+              <ul id="recent_projects" class="project-list"></ul>
+            </aside>
+            <article id="project_detail_pane" class="detail-pane">
+              <p class="muted-row" data-i18n="select_project_hint">Select a project to inspect it.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel hastur-config-panel" aria-labelledby="hastur-config-title">
+          <div class="panel-heading">
+            <h2 id="hastur-config-title" data-i18n="hastur_config_title">Hastur Broker</h2>
+            <span id="hasturTokenStatus" class="muted">token</span>
+          </div>
+          <p class="panel-note" data-i18n="hastur_config_note">Start the local broker, keep the token private, and check whether Godot executors are connected.</p>
+          <div class="button-row">
+            <button type="button" onclick="startBroker()" data-i18n="start_broker">Start Broker</button>
+            <button type="button" class="secondary" onclick="stopBroker()" data-i18n="stop_broker">Stop Broker</button>
+            <button type="button" class="secondary" onclick="loadBrokerStatus()" data-i18n="broker_status">Status</button>
+            <button type="button" class="secondary" onclick="loadBrokerLogs()" data-i18n="broker_logs">Logs</button>
+            <button type="button" class="secondary" onclick="loadHasturExecutors()" data-i18n="load_executors">Executors</button>
+          </div>
+          <p id="hasturMessage" class="message" role="status"></p>
+          <div id="broker_output" class="mini-output"></div>
+        </section>
       </div>
-
-      <label>
-        <span data-i18n="llm_provider">LLM Provider</span>
-        <select id="provider">
-          <option value="mock">mock</option>
-          <option value="openai">OpenAI</option>
-          <option value="anthropic">Anthropic</option>
-          <option value="deepseek">DeepSeek</option>
-          <option value="openai_compatible">OpenAI-compatible</option>
-          <option value="local_openai_compatible">Local OpenAI-compatible</option>
-        </select>
-      </label>
-
-      <label>
-        <span data-i18n="llm_model">Text Model</span>
-        <input id="model" list="llm_model_suggestions" autocomplete="off" placeholder="gpt-5.4-mini">
-        <datalist id="llm_model_suggestions">
-          <option value="gpt-5.5"></option>
-          <option value="gpt-5.4"></option>
-          <option value="gpt-5.4-mini"></option>
-          <option value="claude-opus-4-20250514"></option>
-          <option value="claude-sonnet-4-20250514"></option>
-          <option value="deepseek-v4-flash"></option>
-          <option value="deepseek-v4-pro"></option>
-        </datalist>
-      </label>
-
-      <label>
-        <span data-i18n="llm_base_url">LLM Base URL</span>
-        <input id="llmBaseUrl" autocomplete="off" placeholder="https://api.openai.com/v1">
-      </label>
-
-      <label>
-        <span data-i18n="llm_key">LLM API Key</span>
-        <input id="apiKey" type="password" autocomplete="off" placeholder="sk-...">
-      </label>
-
-      <label>
-        <span data-i18n="image_provider">Image Provider</span>
-        <select id="settings_image_provider">
-          <option value="mock">mock</option>
-          <option value="openai">OpenAI</option>
-          <option value="openai_compatible">OpenAI-compatible</option>
-        </select>
-      </label>
-
-      <label>
-        <span data-i18n="image_model">Image Model</span>
-        <input id="settings_image_model" list="image_model_suggestions" autocomplete="off" placeholder="gpt-image-2">
-        <datalist id="image_model_suggestions">
-          <option value="gpt-image-2"></option>
-          <option value="gpt-image-2-2026-04-21"></option>
-          <option value="gpt-image-1.5"></option>
-          <option value="gpt-image-1"></option>
-          <option value="gpt-image-1-mini"></option>
-          <option value="dall-e-3"></option>
-        </datalist>
-      </label>
-
-      <label>
-        <span data-i18n="image_base_url">Image Base URL</span>
-        <input id="imageBaseUrl" autocomplete="off" placeholder="https://api.openai.com/v1">
-      </label>
-
-      <label>
-        <span data-i18n="image_key">Image API Key</span>
-        <input id="imageApiKey" type="password" autocomplete="off" placeholder="sk-...">
-      </label>
-
-      <div class="button-row">
-        <button type="button" onclick="saveSettings()" data-i18n="save_settings">Save Settings</button>
-        <button type="button" class="secondary" onclick="testLLM()" data-i18n="test_connection">Test Connection</button>
-      </div>
-      <p id="settingsMessage" class="message" role="status"></p>
     </section>
 
-    <section class="panel project-panel" aria-labelledby="project-title">
-      <div class="panel-heading">
-        <h2 id="project-title" data-i18n="godot_project_title">Godot Project</h2>
-        <span class="muted" data-i18n="godot_project_badge">auto Hastur addon</span>
+    <section id="viewHastur" class="view">
+      <div class="chat-shell">
+        <section class="panel chat-panel" aria-labelledby="chat-title">
+          <div class="chat-topbar">
+            <div>
+              <h2 id="chat-title" data-i18n="chat_title">LLM + Hastur Chat</h2>
+              <p class="panel-note" data-i18n="chat_note">Use one input. Type `/` to choose a vendored Hastur skill; token and broker URL stay private.</p>
+            </div>
+            <div class="chat-controls">
+              <label>
+                <span data-i18n="hastur_project">Project</span>
+                <select id="hastur_project_slug"></select>
+              </label>
+              <span id="chatReadiness" class="status-pill">ready</span>
+            </div>
+          </div>
+          <div id="chat_messages" class="chat-messages" aria-live="polite"></div>
+          <div id="skill_picker" class="skill-picker hidden"></div>
+          <div id="chat_attachment_list" class="attachment-list"></div>
+          <div class="composer">
+            <button type="button" class="icon-button" onclick="triggerChatFiles()" title="Attach files" aria-label="Attach files">+</button>
+            <textarea id="chat_instruction" rows="2" data-i18n-placeholder="chat_placeholder" placeholder="/godot-remote-executor Add a Label node to Main.tscn and save the scene."></textarea>
+            <button type="button" onclick="sendHasturChat()" data-i18n="send_to_llm">Send</button>
+            <input id="chat_files" type="file" class="visually-hidden" multiple>
+          </div>
+          <p id="chatMessage" class="message" role="status"></p>
+        </section>
       </div>
-      <p class="panel-note" data-i18n="godot_project_note">Create a Godot project with Hastur copied, enabled, and committed to a fresh Git repository.</p>
-
-      <div class="form-grid">
-        <label>
-          <span data-i18n="project_name">Project Name</span>
-          <input id="project_name" autocomplete="off" data-i18n-placeholder="project_name_placeholder" placeholder="Example: Shadow Garden">
-        </label>
-
-        <label>
-          <span data-i18n="godot_template">Godot Project Template</span>
-          <select id="project_template">
-            <option value="2d" data-i18n="template_2d">2D Game Prototype</option>
-            <option value="3d" data-i18n="template_3d">3D Game Prototype</option>
-          </select>
-        </label>
-
-        <label>
-          <span data-i18n="game_type">Game Type</span>
-          <select id="game_type">
-            <option value="2D top-down action">2D top-down action</option>
-            <option value="2D platformer">2D platformer</option>
-            <option value="2D card game">2D card game</option>
-            <option value="visual novel">visual novel</option>
-            <option value="3D exploration">3D exploration</option>
-            <option value="3D first-person prototype">3D first-person prototype</option>
-            <option value="3D third-person prototype">3D third-person prototype</option>
-          </select>
-        </label>
-
-        <label>
-          <span data-i18n="engine_version">Engine Version</span>
-          <select id="engine">
-            <option value="Godot 4">Godot 4</option>
-            <option value="Godot 4.2">Godot 4.2</option>
-            <option value="Godot 4.3">Godot 4.3</option>
-            <option value="Godot 4.4">Godot 4.4</option>
-          </select>
-        </label>
-
-        <label>
-          <span data-i18n="broker_host">Broker Host</span>
-          <input id="godot_broker_host" value="localhost">
-        </label>
-
-        <label>
-          <span data-i18n="broker_tcp_port">TCP Port</span>
-          <input id="godot_broker_port" type="number" value="5301">
-        </label>
-      </div>
-
-      <div class="checks">
-        <label><input id="enable_git" type="checkbox" checked> <span data-i18n="enable_git">Initialize Git</span></label>
-      </div>
-
-      <button type="button" class="primary" onclick="createProject()" data-i18n="create_godot_project">Create Godot Project</button>
-      <p id="projectMessage" class="message" role="status"></p>
-      <div id="project_output" class="mini-output compact-output"></div>
     </section>
 
-    <section class="panel recent-panel" aria-labelledby="recent-title">
-      <div class="panel-heading">
-        <h2 id="recent-title" data-i18n="recent_projects">Recent Projects</h2>
-        <button type="button" class="secondary compact" onclick="loadProjects()" data-i18n="refresh">Refresh</button>
+    <section id="viewImages" class="view">
+      <div class="image-shell">
+        <section class="panel assets-panel" aria-labelledby="assets-title">
+          <div class="panel-heading">
+            <h2 id="assets-title" data-i18n="assets_title">Image Pipeline</h2>
+            <span class="muted" data-i18n="assets_badge">review workflow</span>
+          </div>
+          <p class="panel-note" data-i18n="assets_note">Generate visual references with the saved image API key, review them, then attach approved assets to project docs.</p>
+          <div class="form-grid">
+            <label>
+              <span data-i18n="asset_project">Project</span>
+              <select id="asset_project_slug"></select>
+            </label>
+            <label>
+              <span data-i18n="asset_purpose">Purpose</span>
+              <select id="asset_purpose">
+                <option value="concept_art" data-i18n="purpose_concept">Concept art</option>
+                <option value="gdd_reference" data-i18n="purpose_gdd">GDD reference</option>
+                <option value="2d_sprite_draft" data-i18n="purpose_sprite">2D sprite draft</option>
+                <option value="ui_icon" data-i18n="purpose_icon">UI/Icon</option>
+                <option value="texture_reference" data-i18n="purpose_texture">Texture reference</option>
+                <option value="blender_3d_reference" data-i18n="purpose_blender">Blender/3D reference</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="image_size">Size</span>
+              <select id="image_size">
+                <option value="1024x1024">1024x1024</option>
+                <option value="1024x1536">1024x1536</option>
+                <option value="1536x1024">1536x1024</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="image_quality">Quality</span>
+              <select id="image_quality">
+                <option value="medium">medium</option>
+                <option value="low">low</option>
+                <option value="high">high</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            <span data-i18n="asset_prompt">Image Prompt</span>
+            <textarea id="asset_prompt" rows="4" data-i18n-placeholder="asset_prompt_placeholder" placeholder="A readable top-down concept image for a dark fantasy Godot prototype."></textarea>
+          </label>
+          <label>
+            <span data-i18n="asset_uploads">Reference Files and Images</span>
+            <input id="asset_files" type="file" multiple>
+          </label>
+          <div class="button-row">
+            <button type="button" onclick="saveAssetSettings()" data-i18n="save_asset_settings">Save Image Defaults</button>
+            <button type="button" class="secondary" onclick="generateImageAsset()" data-i18n="generate_image">Generate Image</button>
+          </div>
+          <p id="assetMessage" class="message" role="status"></p>
+          <div id="asset_gallery" class="asset-gallery"></div>
+        </section>
       </div>
-      <p class="panel-note" data-i18n="recent_note">These are existing generated projects. Startup does not create new projects.</p>
-      <ul id="recent_projects" class="project-list"></ul>
-      <div id="recent_project_details" class="mini-output compact-output"></div>
-    </section>
-
-    <section class="panel assets-panel" aria-labelledby="assets-title">
-      <div class="panel-heading">
-        <h2 id="assets-title" data-i18n="assets_title">Assets</h2>
-        <span class="muted" data-i18n="assets_badge">image pipeline</span>
-      </div>
-      <p class="panel-note" data-i18n="assets_note">Generate concept art, GDD references, 2D drafts, UI icons, texture references, or Blender reference images for an existing project.</p>
-
-      <div class="form-grid">
-        <label>
-          <span data-i18n="asset_project">Project</span>
-          <select id="asset_project_slug"></select>
-        </label>
-
-        <label>
-          <span data-i18n="asset_purpose">Purpose</span>
-          <select id="asset_purpose">
-            <option value="concept_art" data-i18n="purpose_concept">Concept art</option>
-            <option value="gdd_reference" data-i18n="purpose_gdd">GDD reference</option>
-            <option value="2d_sprite_draft" data-i18n="purpose_sprite">2D sprite draft</option>
-            <option value="ui_icon" data-i18n="purpose_icon">UI/Icon</option>
-            <option value="texture_reference" data-i18n="purpose_texture">Texture reference</option>
-            <option value="blender_3d_reference" data-i18n="purpose_blender">Blender/3D reference</option>
-          </select>
-        </label>
-
-        <label>
-          <span data-i18n="image_size">Size</span>
-          <select id="image_size">
-            <option value="1024x1024">1024x1024</option>
-            <option value="1024x1536">1024x1536</option>
-            <option value="1536x1024">1536x1024</option>
-          </select>
-        </label>
-
-        <label>
-          <span data-i18n="image_quality">Quality</span>
-          <select id="image_quality">
-            <option value="medium">medium</option>
-            <option value="low">low</option>
-            <option value="high">high</option>
-          </select>
-        </label>
-      </div>
-
-      <label>
-        <span data-i18n="asset_prompt">Image Prompt</span>
-        <textarea id="asset_prompt" rows="4" data-i18n-placeholder="asset_prompt_placeholder" placeholder="A haunted garden top-down action game concept art, readable silhouettes, dark fantasy."></textarea>
-      </label>
-
-      <div class="button-row">
-        <button type="button" onclick="saveAssetSettings()" data-i18n="save_asset_settings">Save Image Defaults</button>
-        <button type="button" class="secondary" onclick="generateImageAsset()" data-i18n="generate_image">Generate Image</button>
-      </div>
-      <p id="assetMessage" class="message" role="status"></p>
-      <div id="asset_gallery" class="asset-gallery"></div>
-    </section>
-
-    <section class="panel hastur-panel" aria-labelledby="hastur-title">
-      <div class="panel-heading">
-        <h2 id="hastur-title" data-i18n="hastur_title">Hastur Bridge</h2>
-        <span class="muted" data-i18n="hastur_badge">Godot editor operations</span>
-      </div>
-      <p class="panel-note" data-i18n="hastur_note">Start the local broker, connect Godot, and exchange safe structured operations with the bound LLM.</p>
-
-      <div class="form-grid">
-        <label>
-          <span data-i18n="hastur_project">Project</span>
-          <select id="hastur_project_slug"></select>
-        </label>
-
-        <label class="checkbox-label">
-          <input id="hastur_enabled" type="checkbox">
-          <span data-i18n="hastur_enabled">Enable Hastur</span>
-        </label>
-
-        <label>
-          <span data-i18n="hastur_base_url">Broker URL</span>
-          <input id="hastur_base_url" value="http://localhost:5302">
-        </label>
-
-        <label>
-          <span data-i18n="broker_host">Broker Host</span>
-          <input id="broker_host" value="localhost">
-        </label>
-
-        <label>
-          <span data-i18n="broker_http_port">HTTP Port</span>
-          <input id="broker_http_port" type="number" value="5302">
-        </label>
-
-        <label>
-          <span data-i18n="broker_tcp_port">TCP Port</span>
-          <input id="broker_tcp_port" type="number" value="5301">
-        </label>
-
-        <label>
-          <span data-i18n="hastur_token">Auth Token</span>
-          <input id="hastur_auth_token" type="password" autocomplete="off">
-        </label>
-      </div>
-
-      <div class="button-row">
-        <button type="button" onclick="saveHasturSettings()" data-i18n="save_hastur_settings">Save Hastur Settings</button>
-        <button type="button" class="secondary" onclick="startBroker()" data-i18n="start_broker">Start Broker</button>
-        <button type="button" class="secondary" onclick="stopBroker()" data-i18n="stop_broker">Stop Broker</button>
-        <button type="button" class="secondary" onclick="loadBrokerStatus()" data-i18n="broker_status">Broker Status</button>
-        <button type="button" class="secondary" onclick="loadBrokerLogs()" data-i18n="broker_logs">Broker Logs</button>
-        <button type="button" class="secondary" onclick="checkHasturStatus()" data-i18n="check_hastur">Check Status</button>
-        <button type="button" class="secondary" onclick="loadHasturExecutors()" data-i18n="load_executors">Load Executors</button>
-        <button type="button" class="secondary" onclick="applySampleHasturOperation()" data-i18n="apply_sample_operation">Apply Test Node</button>
-      </div>
-      <p id="hasturMessage" class="message" role="status"></p>
-      <div id="broker_output" class="mini-output"></div>
-
-      <h3 data-i18n="ai_operation_title">AI Godot Operation</h3>
-      <label>
-        <span data-i18n="ai_instruction">Instruction</span>
-        <textarea id="ai_operation_instruction" rows="4" data-i18n-placeholder="ai_instruction_placeholder" placeholder="Add a visible test node to the current scene and save it."></textarea>
-      </label>
-      <div class="button-row">
-        <button type="button" class="secondary" onclick="planGodotOperation()" data-i18n="plan_operation">Generate Plan</button>
-        <button type="button" class="secondary" onclick="executeGodotPlan()" data-i18n="execute_plan">Execute Plan</button>
-        <button type="button" class="secondary" onclick="planAndExecuteGodotOperation()" data-i18n="plan_and_execute">Plan and Execute</button>
-      </div>
-      <div id="hastur_output" class="mini-output"></div>
     </section>
   </main>
 

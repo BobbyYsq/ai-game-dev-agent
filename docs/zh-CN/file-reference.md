@@ -1,70 +1,48 @@
-# 文件与函数说明
-
-## 根目录
-
-- `start_windows.cmd`：Windows 双击启动入口。
-- `start_macos.command`：macOS 启动入口。
-- `environment.yml`：Micromamba 环境定义。
-- `requirements.txt`：Python 依赖列表。
-
-## Bootstrap
-
-- `bootstrap/bootstrap_windows.ps1`：在 Windows 下载 Micromamba、创建 runtime 环境、选择端口并启动 FastAPI。
-- `bootstrap/bootstrap_macos.sh`：在 macOS 执行同样流程，并自动识别 CPU 架构。
-- `bootstrap/README_BOOTSTRAP.md`：说明本地 runtime 目录结构。
+# 文件参考
 
 ## 应用入口
 
-- `app/main.py`
-  - `create_app()`：创建 FastAPI，挂载 `/static`，注册 routes，并渲染首页。
-- `app/config.py`
-  - `ensure_workspace_dirs()`：创建工作区目录。
+- `app/main.py`：创建 FastAPI app，注册静态文件、模板和路由。
+- `app/templates/index.html`：管理、LLM + Hastur、图像管线三个视图的结构。
+- `app/static/js/app.js`：仪表盘状态、API 调用、skill 选择器、聊天、图像图库和 Git 工作台。
+- `app/static/css/app.css`：响应式操作界面样式。
 
-## API Routes
+## API 路由
 
-- `app/api/routes_settings.py`
-  - `get_settings()`：返回公开设置。
-  - `save_settings()`：保存 provider、model 和 API Key。
-  - `test_llm_connection()`：调用当前 provider 做连接测试。
-- `app/api/routes_projects.py`
-  - `create_project()`：验证模板并创建项目。
-  - `list_projects()`：列出最近生成项目。
-  - `get_project()`：返回单个项目文件列表。
+- `app/api/routes_settings.py`：公开设置、保存设置、测试 LLM。
+- `app/api/routes_godot_projects.py`：创建空白 Godot 项目。
+- `app/api/routes_projects.py`：列出生成项目和项目详情。
+- `app/api/routes_hastur.py`：broker 控制、skill、executor、聊天和结构化操作。
+- `app/api/routes_assets.py`：图像生成、资产文件、附加到 GDD、标记 Blender 参考。
+- `app/api/routes_git.py`：项目本地 Git 状态、审查、diff、日志、提交、还原。
 
-## Services
+## 服务层
 
-- `app/services/settings_service.py`
-  - `load_private_settings()`：读取本地私有设置。
-  - `save_private_settings()`：写入本地私有设置。
-  - `get_public_settings()`：隐藏 API Key 明文。
-  - `update_settings()`：合并 UI 更新。
-- `app/services/project_service.py`
-  - `slugify()`：把项目名转换为安全目录名。
-  - `create_ai_game_project()`：串联文档、Godot 文件、评审报告和 Git。
-- `app/services/git_service.py`
-  - `init_repo()`：执行 `git init`。
-  - `commit_all()`：执行 stage 和 commit。
+- `app/services/settings_service.py`：本地私有设置、provider 推断、公开设置。
+- `app/services/godot_project_service.py`：创建启用 Hastur 的空白 Godot 项目。
+- `app/services/hastur_chat_service.py`：LLM + Hastur 聊天 prompt、附件、确认和执行。
+- `app/services/hastur_skill_service.py`：发现 vendored Hastur skill。
+- `app/services/hastur_service.py`：安全结构化操作验证和 broker 执行。
+- `app/services/broker_service.py`：管理本地 Hastur broker 进程。
+- `app/services/asset_service.py`：生成图像、manifest、GDD 链接、Blender 说明。
+- `app/services/git_service.py`：生成项目范围内的 Git helper。
 
-## 生成器
+## Provider Adapter
 
-- `app/tools/godot_project_tools.py`
-  - `generate_godot_template_project()`：分发 `2d` 或 `3d` 模板生成。
-- `app/tools/godot_templates/base.py`：共享目录、project.godot 和脚本辅助函数。
-- `app/tools/godot_templates/template_2d.py`：生成最小可运行 2D 模板。
-- `app/tools/godot_templates/template_3d.py`：生成最小可运行 3D 模板。
-## v0.3 新增文件
+- `app/models/openai_provider.py`：OpenAI-compatible 聊天、视觉输入和 Anthropic adapter。
+- `app/models/llm_provider.py`：根据保存设置选择文本 provider。
+- `app/models/image_provider.py`：根据保存设置选择图像 provider。
 
-- `app/models/image_provider.py`：提供 `MockImageProvider`、`OpenAIImageProvider` 和 `get_image_provider()`。
-- `app/services/asset_service.py`：创建图像资产、写入 `asset_manifest.json`、把图片追加到 `GDD.md`、生成 Blender 参考说明。
-- `app/api/routes_assets.py`：提供图像生成、资产列表、资产文件读取、加入 GDD、标记 Blender 参考等接口。
-- `app/services/hastur_service.py`：定义 `GodotOperation`，校验必要字段，生成安全 GDScript，检查 Hastur 状态，列出执行器并应用 operation。
-- `app/api/routes_hastur.py`：提供 Hastur 状态、执行器和结构化 operation 接口。
-- `app/agent/godot_operation_planner.py`：校验后续 LLM 生成的 Godot operation plan。
-- `tests/test_assets.py`、`tests/test_hastur.py`、`tests/test_settings.py`：覆盖 v0.3 服务层的 smoke tests。
-# v0.3 Addendum
+## Godot 生成
 
-- `app/services/broker_service.py`: manages the local Hastur broker process and captures logs.
-- `app/services/godot_project_service.py`: creates standalone Godot projects with automatic Hastur addon integration.
-- `app/services/godot_operation_service.py`: asks the configured LLM for operation plans, validates them, and executes validated plans.
-- `AGENTS.md`: AI-facing project context and required workflow rules.
-- `THIRD_PARTY_NOTICES.md`: root third-party license notice for the vendored Hastur Operation Plugin.
+- `app/tools/godot_templates/base.py`：最小 `project.godot`、`Main.tscn`、目录和 Hastur addon 安装。
+- `app/tools/godot_templates/template_2d.py`：2D 原型模板。
+- `app/tools/godot_templates/template_3d.py`：3D 原型模板。
+
+## 测试
+
+- `tests/test_settings.py`：provider 推断和公开设置。
+- `tests/test_assets.py`：生成资产 manifest 和文档链接。
+- `tests/test_hastur.py`：结构化操作验证和 GDScript 构造。
+- `tests/test_hastur_skills.py`：skill 发现和聊天中隐藏 token。
+- `tests/test_git_service.py`：本地 Git 状态和需要确认的 rollback。
