@@ -35,3 +35,21 @@ chmod +x start_macos.command
 `runtime/` 是自动生成的本地目录，不应该提交到 Git。如果依赖环境损坏，可以关闭应用并删除 `runtime/`，下一次启动会重新创建。
 
 启动脚本不会使用 Anaconda `defaults` channel，因此正常启动时不应该再看到 Anaconda Terms warning。
+## 生成图像资产
+
+1. 先创建或选择一个已有生成项目。
+2. 打开 Assets 面板。
+3. 离线测试使用 `mock`，真实生成选择 `openai` 并配置 API Key。
+4. 选择用途，例如 `concept_art` 或 `blender_3d_reference`。
+5. 生成图片后，可以加入 GDD 或标记为 Blender 参考。
+
+## Hastur 桥接
+
+1. 在本机启动 Hastur broker。
+2. 在目标 Godot 项目中启用插件。
+3. 在 Hastur 面板保存 broker 地址。
+4. 检查状态并加载执行器。
+5. UI 只执行结构化 operation，不直接执行任意 GDScript。
+# v0.3 Addendum
+
+Use the Hastur panel to start the local broker. Projects created from the Godot Project panel include and enable the Hastur addon automatically. Open the generated project in Godot, load executors, then use AI Godot Operation to generate and execute validated operation plans.

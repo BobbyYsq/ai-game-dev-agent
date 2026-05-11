@@ -1,4 +1,7 @@
 from pathlib import Path
+import shutil
+
+from app.config import HASTUR_ADDON_DIR, HASTUR_LICENSE_FILE
 
 
 DEFAULT_FOLDERS = [
@@ -15,6 +18,8 @@ DEFAULT_FOLDERS = [
     "assets/generated/cache/images",
     "assets/generated/cache/audio",
     "assets/generated/cache/models",
+    "addons",
+    "licenses",
 ]
 
 
@@ -29,7 +34,7 @@ def write_text(path: Path, content: str) -> Path:
     return path
 
 
-def create_project_godot(project_dir: Path, project_name: str) -> Path:
+def create_project_godot(project_dir: Path, project_name: str, broker_host: str = "localhost", broker_port: int = 5301) -> Path:
     return write_text(
         project_dir / "project.godot",
         f"""; Engine configuration file.
@@ -38,6 +43,13 @@ config_version=5
 [application]
 config/name="{project_name}"
 run/main_scene="res://scenes/Main.tscn"
+
+[hastur_operation]
+broker_host="{broker_host}"
+broker_port={int(broker_port)}
+
+[editor_plugins]
+enabled=PackedStringArray("res://addons/hasturoperationgd/plugin.cfg")
 
 [input]
 move_left={{"deadzone":0.2,"events":[Object(InputEventKey,"resource_local_to_scene":false,"physical_keycode":65)]}}
@@ -50,6 +62,41 @@ interact={{"deadzone":0.2,"events":[Object(InputEventKey,"resource_local_to_scen
 pause={{"deadzone":0.2,"events":[Object(InputEventKey,"resource_local_to_scene":false,"physical_keycode":27)]}}
 """,
     )
+
+
+def install_hastur_addon(project_dir: Path) -> list[Path]:
+    if not HASTUR_ADDON_DIR.exists():
+        raise FileNotFoundError(f"Hastur addon not found: {HASTUR_ADDON_DIR}")
+
+    addon_target = project_dir / "addons" / "hasturoperationgd"
+    addon_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(HASTUR_ADDON_DIR, addon_target, dirs_exist_ok=True)
+
+    license_target = project_dir / "licenses" / "HASTUR_OPERATION_PLUGIN_LICENSE.md"
+    license_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(HASTUR_LICENSE_FILE, license_target)
+
+    notice = write_text(
+        project_dir / "THIRD_PARTY_NOTICES.md",
+        """# Third-Party Notices
+
+## Hastur Operation Plugin
+
+This Godot project includes the Hastur Operation Plugin addon under `addons/hasturoperationgd/`.
+
+- Copyright: Copyright (c) 2026 Raiix
+- License: MIT License
+- Full license: `licenses/HASTUR_OPERATION_PLUGIN_LICENSE.md`
+
+The plugin is enabled in `project.godot` for editor-side automation through a local broker.
+""",
+    )
+
+    return [
+        path
+        for path in [notice, license_target, *addon_target.rglob("*")]
+        if path.is_file()
+    ]
 
 
 def create_shared_scripts(project_dir: Path) -> list[Path]:

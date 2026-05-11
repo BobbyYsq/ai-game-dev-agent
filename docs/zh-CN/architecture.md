@@ -34,3 +34,21 @@ v0.2.1 的 agent 模块刻意保持简单：它们负责构造 GDD、技术设�
 - `workspace/generated_godot_projects/` 保存生成的 Godot 项目。
 - `workspace/cache/` 预留给未来共享缓存。
 - `runtime/` 保存 portable Micromamba 和本地 Python 环境。
+## v0.3 管线
+
+当前应用是一个本地 FastAPI 控制平面：
+
+- `app/api/` 提供 settings、project、asset 和 Hastur 路由。
+- `app/services/asset_service.py` 负责图像资产生成、缓存写入、manifest 更新、GDD 关联和 Blender 参考说明。
+- `app/models/image_provider.py` 抽象 `mock` 和 OpenAI 图像生成，OpenAI 默认模型为 `gpt-image-2`。
+- `app/services/hastur_service.py` 校验结构化 Godot operation，并在调用本地 Hastur broker 前转换成受控 GDScript。
+- `app/agent/godot_operation_planner.py` 为后续 LLM 规划 Godot 操作做准备，负责校验 JSON operation plan。
+- `app/templates/index.html` 和 `app/static/js/app.js` 提供中英文双语控制台。
+
+生成资产保存在每个 Godot 项目目录内部，方便项目迁移和版本管理。
+# v0.3 Addendum
+
+- `app/services/broker_service.py` manages the local Hastur broker process and captures logs.
+- `app/services/godot_project_service.py` creates standalone Godot projects with automatic Hastur addon integration.
+- `app/services/godot_operation_service.py` asks the configured LLM for operation plans, validates them, and executes validated plans.
+- Godot-related implementation must reference local `godot-docs/`.

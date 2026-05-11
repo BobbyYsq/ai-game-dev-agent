@@ -104,7 +104,8 @@ h3 {
 }
 
 .project-panel,
-.output-panel {
+.assets-panel,
+.hastur-panel {
   grid-column: 2;
 }
 
@@ -170,6 +171,19 @@ textarea {
   margin: 0;
   color: var(--text);
   font-weight: 500;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding-top: 22px;
+}
+
+.checkbox-label input {
+  width: auto;
+  margin: 0;
 }
 
 .checks input {
@@ -291,8 +305,8 @@ button.compact {
   white-space: nowrap;
 }
 
-.output-empty,
-.output-card {
+.output-card,
+.mini-output {
   min-height: 220px;
   max-height: 420px;
   overflow: auto;
@@ -301,6 +315,62 @@ button.compact {
   border-radius: 6px;
   background: #fbfcfb;
   overflow-wrap: anywhere;
+}
+
+.mini-output {
+  min-height: 120px;
+  max-height: 260px;
+  margin-top: 12px;
+  white-space: pre-wrap;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+}
+
+.compact-output {
+  min-height: 0;
+  max-height: 300px;
+}
+
+.asset-gallery {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.asset-card {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fbfcfb;
+}
+
+.asset-card img {
+  width: 96px;
+  height: 96px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--soft);
+}
+
+.asset-card strong,
+.asset-card span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.asset-card span,
+.asset-card p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.asset-card p {
+  max-height: 58px;
+  margin: 6px 0 10px;
+  overflow: auto;
 }
 
 dl {
@@ -349,7 +419,8 @@ dd {
   }
 
   .project-panel,
-  .output-panel,
+  .assets-panel,
+  .hastur-panel,
   .settings-panel,
   .recent-panel {
     grid-column: 1;
@@ -357,5 +428,15 @@ dd {
 
   .file-list {
     columns: 1;
+  }
+
+  .asset-card {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-card img {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
   }
 }
