@@ -52,3 +52,18 @@
 - `app/tools/godot_templates/base.py`: shared folder, project file, and script helpers.
 - `app/tools/godot_templates/template_2d.py`: writes the playable 2D template.
 - `app/tools/godot_templates/template_3d.py`: writes the playable 3D template.
+## v0.3 Added Files
+
+- `app/models/image_provider.py`: `MockImageProvider`, `OpenAIImageProvider`, and `get_image_provider()` for image generation.
+- `app/services/asset_service.py`: creates image assets, writes `asset_manifest.json`, appends images to `GDD.md`, and writes Blender reference notes.
+- `app/api/routes_assets.py`: exposes image generation, asset listing, asset file serving, GDD attachment, and Blender reference endpoints.
+- `app/services/hastur_service.py`: defines `GodotOperation`, validates required fields, builds safe GDScript snippets, checks Hastur status, lists executors, and applies operations.
+- `app/services/broker_service.py`: manages the local Hastur broker process and captures logs.
+- `app/services/godot_project_service.py`: creates standalone Godot projects with automatic Hastur addon integration.
+- `app/services/godot_operation_service.py`: asks the configured LLM for operation plans, validates them, and executes validated plans.
+- `app/api/routes_hastur.py`: exposes Hastur status, executor, and structured operation endpoints.
+- `app/api/routes_godot_projects.py`: exposes standalone Godot project creation.
+- `app/agent/godot_operation_planner.py`: validates future LLM-produced Godot operation plans.
+- `AGENTS.md`: AI-facing project context and required workflow rules.
+- `THIRD_PARTY_NOTICES.md`: root third-party license notice for the vendored Hastur Operation Plugin.
+- `tests/test_assets.py`, `tests/test_hastur.py`, `tests/test_settings.py`: smoke coverage for v0.3 services.

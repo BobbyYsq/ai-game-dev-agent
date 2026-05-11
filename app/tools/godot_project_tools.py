@@ -9,9 +9,11 @@ def generate_godot_template_project(
     project_name: str,
     game_type: str,
     project_template: str = "2d",
+    broker_host: str = "localhost",
+    broker_port: int = 5301,
 ) -> list[Path]:
     if project_template == "2d":
-        return generate_2d_playable_template(project_dir, project_name, game_type)
+        return generate_2d_playable_template(project_dir, project_name, game_type, broker_host, broker_port)
     if project_template == "3d":
-        return generate_3d_playable_template(project_dir, project_name, game_type)
+        return generate_3d_playable_template(project_dir, project_name, game_type, broker_host, broker_port)
     raise ValueError(f"Unknown Godot project template: {project_template}")

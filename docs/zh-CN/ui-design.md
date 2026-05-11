@@ -35,3 +35,16 @@
 ## Output Panel
 
 输出区域展示项目 slug、模板、路径、评审摘要、下一步、生成文件和请求错误。
+## v0.3 面板
+
+- Settings：选择 `mock` 或 `openai`，选择文本模型，并在本地保存 API Key。
+- Create Project：提交项目名称、GDD/想法、Godot 模板、游戏类型、引擎版本和原型范围。启动应用不会自动创建项目。
+- Recent Projects：查看已生成项目和文件列表，详情输出限制在面板内滚动。
+- Assets：选择已有项目，选择图像用途，输入 prompt，生成图像，加入 GDD，或标记为 Blender 参考图。
+- Hastur Bridge：保存 broker 设置，检查状态，加载执行器，并执行安全测试 operation。
+
+语言切换按钮会在英文和中文之间切换控制台文案，不会改变已保存项目数据。
+# v0.3 Addendum
+
+- Godot Project panel creates a standalone Godot project with Hastur copied and enabled automatically.
+- Hastur Bridge panel can start/stop the broker, inspect status/logs, generate LLM operation plans, and execute validated plans.

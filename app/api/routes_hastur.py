@@ -1,0 +1,115 @@
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import Any
+
+from app.services.broker_service import broker_logs, broker_status, start_broker, stop_broker
+from app.services.hastur_service import GodotOperation, apply_hastur_operation, hastur_executors, hastur_status
+from app.services.godot_operation_service import execute_godot_operation_plan, plan_godot_operations
+
+router = APIRouter()
+
+
+class ApplyOperationRequest(BaseModel):
+    operation: GodotOperation
+    executor_id: str | None = None
+
+
+class PlanOperationRequest(BaseModel):
+    instruction: str
+    executor_id: str | None = None
+    executors: Any | None = None
+
+
+class ExecutePlanRequest(BaseModel):
+    operations: list[GodotOperation]
+    executor_id: str | None = None
+
+
+class BrokerStartRequest(BaseModel):
+    host: str | None = None
+    http_port: int | None = None
+    tcp_port: int | None = None
+
+
+@router.get("/api/hastur/broker/status")
+def get_broker_status():
+    return broker_status()
+
+
+@router.post("/api/hastur/broker/start")
+def start_hastur_broker(payload: BrokerStartRequest):
+    try:
+        return start_broker(payload.host, payload.http_port, payload.tcp_port)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/api/hastur/broker/stop")
+def stop_hastur_broker():
+    return stop_broker()
+
+
+@router.get("/api/hastur/broker/logs")
+def get_broker_logs():
+    return broker_logs()
+
+
+@router.get("/api/hastur/status")
+def get_hastur_status():
+    return hastur_status()
+
+
+@router.get("/api/hastur/executors")
+def get_hastur_executors():
+    return hastur_executors()
+
+
+@router.post("/api/projects/{project_slug}/hastur/apply-operation")
+def apply_operation(project_slug: str, payload: ApplyOperationRequest):
+    try:
+        return apply_hastur_operation(project_slug, payload.operation, payload.executor_id).model_dump()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/api/projects/{project_slug}/hastur/execute")
+def execute_structured_operation(project_slug: str, payload: ApplyOperationRequest):
+    try:
+        return apply_hastur_operation(project_slug, payload.operation, payload.executor_id).model_dump()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/api/projects/{project_slug}/hastur/plan")
+def plan_operations(project_slug: str, payload: PlanOperationRequest):
+    if not payload.instruction.strip():
+        raise HTTPException(status_code=422, detail="instruction is required")
+    try:
+        plan = plan_godot_operations(project_slug, payload.instruction.strip(), payload.executors)
+        return {"success": True, "plan": plan.model_dump()}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/api/projects/{project_slug}/hastur/execute-plan")
+def execute_plan(project_slug: str, payload: ExecutePlanRequest):
+    try:
+        return execute_godot_operation_plan(project_slug, payload.operations, payload.executor_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/api/projects/{project_slug}/hastur/plan-and-execute")
+def plan_and_execute(project_slug: str, payload: PlanOperationRequest):
+    if not payload.instruction.strip():
+        raise HTTPException(status_code=422, detail="instruction is required")
+    try:
+        plan = plan_godot_operations(project_slug, payload.instruction.strip(), payload.executors)
+        execution = execute_godot_operation_plan(project_slug, plan.operations, payload.executor_id)
+        return {"success": execution["success"], "plan": plan.model_dump(), "execution": execution}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

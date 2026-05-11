@@ -4,13 +4,20 @@ from app.tools.godot_templates.base import (
     create_project_godot,
     create_shared_scripts,
     ensure_default_folders,
+    install_hastur_addon,
     write_text,
 )
 
 
-def generate_2d_playable_template(project_dir: Path, project_name: str, game_type: str) -> list[Path]:
+def generate_2d_playable_template(
+    project_dir: Path,
+    project_name: str,
+    game_type: str,
+    broker_host: str = "localhost",
+    broker_port: int = 5301,
+) -> list[Path]:
     ensure_default_folders(project_dir)
-    files = [create_project_godot(project_dir, project_name)]
+    files = [create_project_godot(project_dir, project_name, broker_host, broker_port)]
     files.extend(
         [
             _write_main_scene(project_dir),
@@ -23,6 +30,7 @@ def generate_2d_playable_template(project_dir: Path, project_name: str, game_typ
         ]
     )
     files.extend(create_shared_scripts(project_dir))
+    files.extend(install_hastur_addon(project_dir))
     return files
 
 

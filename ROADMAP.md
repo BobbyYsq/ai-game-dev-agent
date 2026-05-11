@@ -1,27 +1,46 @@
 # ROADMAP
 
-This roadmap keeps external generation services out of v0.2.1. The current release focuses on startup reliability, local settings, project creation, and playable Godot prototype templates.
+## v0.3 Image Generation + Hastur Bridge
 
-## v0.3 Image Generation Pipeline
-- Add image-2 provider.
-- Generate concept art into assets/generated/cache/images/.
-- Allow generated images to be attached to GDD.
-- Allow generated images to be promoted to 2D asset references.
-- Prepare images as references for Blender/3D generation.
+Implemented in this branch:
+
+- Image asset generation through `mock` and OpenAI providers.
+- Default image model setting: `gpt-image-2`.
+- Generated image cache under `assets/generated/cache/images/`.
+- `asset_manifest.json` metadata for image assets.
+- Attach generated images to `docs/GDD.md`.
+- Mark images as Blender references and write `docs/BLENDER_REFERENCE_NOTES.md`.
+- Hastur status, executor, and safe structured operation APIs.
+- UI panels for Assets, standalone Godot Project creation, and Hastur.
+- Automatic Hastur addon installation and editor-plugin enablement for generated Godot projects.
+- Local broker-server lifecycle controls from the dashboard.
+- LLM operation planning that validates JSON before broker execution.
+- AI-facing `AGENTS.md` plus local `godot-docs/` as the required source for Godot changes.
+
+Remaining hardening:
+
+- Verify real OpenAI image generation across account tiers.
+- Match Hastur broker payload details against live plugin behavior.
+- Add richer operation types after live Godot editor testing.
 
 ## v0.4 Claude Blender 3D Pipeline
-- Generate Blender Python scripts.
-- Run Blender headless.
-- Export GLB/FBX into assets/models/.
 
-## v0.5 Hastur / Godot Editor Bridge
-- Call Hastur operation plugin.
-- Create scenes/nodes/signals inside Godot editor.
-- Import generated assets.
+- Generate Blender Python scripts from selected reference images.
+- Run Blender headless.
+- Export `.glb` or `.fbx` into `assets/models/`.
+- Write Godot import notes for generated 3D assets.
+
+## v0.5 Hastur / Godot Editor Bridge Expansion
+
+- Use LLM-generated operation plans to edit Godot scenes.
+- Create nodes, signals, imports, and scene saves through Hastur.
+- Read editor state and feed it back into review reports.
+- Keep arbitrary GDScript execution behind an admin/debug gate only.
 
 ## v0.6 Playtest / Fix / Commit Loop
-- Collect user feedback.
-- Analyze generated project.
-- Modify scripts/scenes/docs.
-- Generate review report.
-- Commit changes to Git.
+
+- Collect user playtest feedback.
+- Analyze generated project files and review reports.
+- Modify scripts, scenes, docs, and asset manifests.
+- Generate a new review report.
+- Commit the iteration to Git.

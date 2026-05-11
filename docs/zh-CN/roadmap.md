@@ -1,32 +1,20 @@
 # 路线图
 
-## v0.3 图像生成管线
+## v0.3
 
-- 增加 image-2 provider。
-- 将概念图生成到 `assets/generated/cache/images/`。
-- 允许生成图像链接到 `docs/GDD.md`。
-- 将图片提升为 2D sprite、icon、UI 或 texture 参考。
-- 将选定图片作为 Blender 或 3D 资产生成参考。
+图像生成、资产 manifest、GDD 图片关联、Blender 参考说明，以及第一版安全 Hastur 桥接接口。
 
-## v0.4 Claude Blender 3D 管线
+## v0.4
 
-- 根据项目目标生成 Blender Python 脚本。
-- 在可用时以 headless 方式运行 Blender。
-- 导出 `.glb` 或 `.fbx` 到 `assets/models/`。
-- 为生成的 3D 资产补充评审说明。
+Claude Blender provider、Blender Python 脚本生成、headless Blender 执行，以及 `.glb` / `.fbx` 导出。
 
-## v0.5 Hastur / Godot Editor Bridge
+## v0.5
 
-- 在 `hastur_bridge.py` 中加入真实桥接层。
-- 向 Godot 编辑器插件发送结构化操作。
-- 创建场景、节点、信号、导入资产和编辑器侧检查。
-- 读取操作结果并写入评审报告。
+更完整的 Hastur / Godot 编辑器自动化，包括 LLM operation plan、读取编辑器状态、场景/节点/信号工作流。
 
-## v0.6 Playtest / Fix / Commit 循环
+## v0.6
 
-- 收集用户试玩反馈。
-- 分析已生成项目文件。
-- 生成修复计划。
-- 修改脚本、场景和文档。
-- 生成新的评审报告。
-- 使用生成的 Git message 提交修改。
+试玩反馈、修复规划、代码/场景更新、Review Report 刷新和 Git commit 循环。
+# v0.3 Addendum
+
+Standalone Godot project creation, automatic Hastur addon enablement, dashboard broker controls, LLM operation planning, and third-party MIT notices are part of the v0.3 completion work.

@@ -52,3 +52,19 @@
 - `app/tools/godot_templates/base.py`：共享目录、project.godot 和脚本辅助函数。
 - `app/tools/godot_templates/template_2d.py`：生成最小可运行 2D 模板。
 - `app/tools/godot_templates/template_3d.py`：生成最小可运行 3D 模板。
+## v0.3 新增文件
+
+- `app/models/image_provider.py`：提供 `MockImageProvider`、`OpenAIImageProvider` 和 `get_image_provider()`。
+- `app/services/asset_service.py`：创建图像资产、写入 `asset_manifest.json`、把图片追加到 `GDD.md`、生成 Blender 参考说明。
+- `app/api/routes_assets.py`：提供图像生成、资产列表、资产文件读取、加入 GDD、标记 Blender 参考等接口。
+- `app/services/hastur_service.py`：定义 `GodotOperation`，校验必要字段，生成安全 GDScript，检查 Hastur 状态，列出执行器并应用 operation。
+- `app/api/routes_hastur.py`：提供 Hastur 状态、执行器和结构化 operation 接口。
+- `app/agent/godot_operation_planner.py`：校验后续 LLM 生成的 Godot operation plan。
+- `tests/test_assets.py`、`tests/test_hastur.py`、`tests/test_settings.py`：覆盖 v0.3 服务层的 smoke tests。
+# v0.3 Addendum
+
+- `app/services/broker_service.py`: manages the local Hastur broker process and captures logs.
+- `app/services/godot_project_service.py`: creates standalone Godot projects with automatic Hastur addon integration.
+- `app/services/godot_operation_service.py`: asks the configured LLM for operation plans, validates them, and executes validated plans.
+- `AGENTS.md`: AI-facing project context and required workflow rules.
+- `THIRD_PARTY_NOTICES.md`: root third-party license notice for the vendored Hastur Operation Plugin.

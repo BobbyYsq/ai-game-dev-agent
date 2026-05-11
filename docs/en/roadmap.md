@@ -1,32 +1,19 @@
 # Roadmap
 
-## v0.3 Image Generation Pipeline
+## v0.3
 
-- Add an image-2 provider.
-- Generate concept art into `assets/generated/cache/images/`.
-- Allow images to be linked from `docs/GDD.md`.
-- Promote images to 2D sprite, icon, UI, or texture references.
-- Prepare selected images as Blender or 3D asset references.
+Image generation, asset manifests, GDD image attachment, Blender reference notes, and the first safe Hastur bridge endpoints.
 
-## v0.4 Claude Blender 3D Pipeline
+Also includes standalone Godot project creation, automatic Hastur addon enablement, dashboard broker controls, LLM operation planning, and third-party MIT notices.
 
-- Generate Blender Python scripts from project goals.
-- Run Blender headless when available.
-- Export `.glb` or `.fbx` files into `assets/models/`.
-- Add review notes for generated 3D assets.
+## v0.4
 
-## v0.5 Hastur / Godot Editor Bridge
+Claude Blender provider, Blender Python generation, headless Blender execution, and `.glb` / `.fbx` export.
 
-- Add a real bridge layer in `hastur_bridge.py`.
-- Send structured Godot operations to the editor plugin.
-- Create scenes, nodes, signals, imports, and editor-side checks.
-- Read back operation results for review reports.
+## v0.5
 
-## v0.6 Playtest / Fix / Commit Loop
+Richer Hastur/Godot editor automation with LLM operation planning, editor state reads, and scene/node/signal workflows.
 
-- Collect user playtest feedback.
-- Inspect generated project files.
-- Produce a fix plan.
-- Modify scripts, scenes, and docs.
-- Generate a new review report.
-- Commit changes with a generated Git message.
+## v0.6
+
+Playtest feedback, fix planning, code/scene updates, review report refresh, and Git commit loop.

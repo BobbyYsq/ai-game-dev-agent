@@ -7,9 +7,20 @@ from app.services.settings_service import get_public_settings, update_settings
 router = APIRouter()
 
 class SettingsUpdateRequest(BaseModel):
-    llm_provider: str = 'mock'
+    llm_provider: str | None = None
     openai_api_key: str | None = None
-    openai_model: str = 'gpt-4.1-mini'
+    openai_model: str | None = None
+    image_provider: str | None = None
+    openai_image_model: str | None = None
+    image_size: str | None = None
+    image_quality: str | None = None
+    hastur_enabled: bool | None = None
+    hastur_base_url: str | None = None
+    hastur_auth_token: str | None = None
+    hastur_target_mode: str | None = None
+    hastur_broker_host: str | None = None
+    hastur_broker_http_port: int | None = None
+    hastur_broker_tcp_port: int | None = None
 
 @router.get('/api/settings')
 def get_settings():

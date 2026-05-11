@@ -1,18 +1,20 @@
 # AI Game Development Agent
 
-AI Game Development Agent 是一个面向 Godot 原型开发的应用层 AI 游戏开发工作流平台。它不是“一次提示词生成完整商业游戏”的工具，而是把用户的一句话需求或 GDD 转换为可迭代的 Godot 原型项目：包含文档、场景、脚本、资产目录、评审报告和后续修复循环的基础结构。
+AI Game Development Agent 是一个应用层 AI 游戏开发 Agent 平台。它不是“一句话生成完整商业游戏”的工具，而是一个本地 Agent 控制台：把游戏想法或 GDD 转成文档、Godot 原型文件、视觉参考、Review Report，并为后续 Godot 编辑器自动操作做准备。
 
-## v0.2.1 已提供能力
+## v0.3 已提供能力
 
-- Windows 和 macOS 一键启动入口。
-- 首次启动自动在 `runtime/` 下准备 portable Micromamba 环境。
-- FastAPI 后端和本地 Web 控制台。
-- 在 UI 中配置 LLM provider、OpenAI model 和 API Key。
-- API Key 保存在 `workspace/config/settings.json`，并被 `.gitignore` 排除。
-- 项目创建 API 和项目创建 UI。
-- Godot 4 的 2D / 3D 最小可运行原型模板。
-- 自动生成 GDD、技术设计、功能任务、资产列表和评审报告。
-- 可选为生成项目执行 Git init 和初始 commit。
+- Windows / macOS 一键启动，使用 portable Micromamba 自动准备运行环境。
+- FastAPI 后端和中英文双语本地控制台。
+- 在 UI 中配置 API Key、文本模型、图像模型和 Hastur broker。
+- 2D / 3D Godot 4 可运行原型模板。
+- 图像资产生成管线，支持 `mock` 和 OpenAI provider。
+- 默认 OpenAI 图像模型：`gpt-image-2`。
+- 每个生成项目都有图像缓存目录：`assets/generated/cache/images/`。
+- 使用 `asset_manifest.json` 记录生成图片的用途、prompt、路径和状态。
+- 可将生成图片追加到 `docs/GDD.md`。
+- 可将图片标记为 Blender / 3D 建模参考，并生成 `docs/BLENDER_REFERENCE_NOTES.md`。
+- Hastur 安全桥接 API：只接收结构化 Godot operation，不在 UI 暴露任意 GDScript 输入。
 
 ## 快速启动
 
@@ -29,25 +31,32 @@ chmod +x start_macos.command
 ./start_macos.command
 ```
 
-第一次启动时，脚本会下载 portable Micromamba，只使用 `conda-forge` 创建 `runtime/envs/ai-game-dev-agent`，再从 `requirements.txt` 安装 Python 包，自动选择 8000-8003 中可用端口，启动 FastAPI，并打开浏览器。脚本不使用 Anaconda `defaults` channel。
+首次启动会自动下载 portable Micromamba，只使用 `conda-forge` 创建 `runtime/envs/ai-game-dev-agent`，安装 `requirements.txt`，在 8000-8003 中寻找可用端口，启动 FastAPI，并打开浏览器。
 
-## UI 使用流程
+## UI 工作流
 
-1. 打开控制台页面。
-2. 离线测试时使用 `mock` provider；需要真实 LLM 时选择 `openai` 并填写 API Key。
-3. 保存设置，并按需测试连接。
-4. 输入项目名称和游戏想法。
-5. 选择 `2D Game Prototype` 或 `3D Game Prototype`。
-6. 创建项目。
-7. 用 Godot 4 打开生成目录，并运行 `scenes/Main.tscn`。
+1. 打开控制台。
+2. 用右上角按钮切换 English / 中文。
+3. 离线测试可使用 `mock`，需要真实模型时选择 `openai` 并保存 API Key。
+4. 在 Project 面板创建 2D 或 3D Godot 原型。
+5. 在 Assets 面板生成概念图、GDD 参考图、2D 草稿、UI 图标、贴图参考或 Blender 参考图。
+6. 只有在本地 Hastur broker 和 Godot 插件启动后，才使用 Hastur 面板执行 Godot 编辑器操作。
 
-生成项目目录：
+生成项目位置：
 
 ```text
 workspace/generated_godot_projects/
 ```
 
-## API 概览
+私有配置位置：
+
+```text
+workspace/config/settings.json
+```
+
+该文件已被 Git 忽略，只用于保存本地 API Key 和本地 broker 配置。
+
+## API 摘要
 
 - `GET /api/health`
 - `GET /api/settings`
@@ -56,22 +65,14 @@ workspace/generated_godot_projects/
 - `POST /api/projects/create`
 - `GET /api/projects`
 - `GET /api/projects/{project_slug}`
-
-创建项目请求示例：
-
-```json
-{
-  "project_name": "Shadow Garden",
-  "game_idea": "A 2D top-down action prototype in a haunted garden.",
-  "project_template": "2d",
-  "game_type": "2D top-down action",
-  "engine": "Godot 4",
-  "prototype_scope": "vertical slice",
-  "enable_git": true,
-  "generate_docs": true,
-  "generate_godot_skeleton": true
-}
-```
+- `POST /api/projects/{project_slug}/assets/images/generate`
+- `GET /api/projects/{project_slug}/assets`
+- `GET /api/projects/{project_slug}/assets/{asset_id}/file`
+- `POST /api/projects/{project_slug}/assets/{asset_id}/attach-to-gdd`
+- `POST /api/projects/{project_slug}/assets/{asset_id}/mark-blender-reference`
+- `GET /api/hastur/status`
+- `GET /api/hastur/executors`
+- `POST /api/projects/{project_slug}/hastur/apply-operation`
 
 ## 文档
 
@@ -79,9 +80,15 @@ workspace/generated_godot_projects/
 - [架构说明](docs/zh-CN/architecture.md)
 - [API 说明](docs/zh-CN/api.md)
 - [UI 设计](docs/zh-CN/ui-design.md)
-- [文件与函数说明](docs/zh-CN/file-reference.md)
+- [文件和函数参考](docs/zh-CN/file-reference.md)
 - [路线图](docs/zh-CN/roadmap.md)
 
-## 路线图
+## 当前边界
 
-v0.3 计划加入 image-2 图像生成和概念图缓存。v0.4 计划加入 Claude/Blender 3D 资产管线。v0.5 计划接入 Hastur 或其他 Godot 编辑器操作桥。v0.6 计划加入试玩反馈、自动修复、评审报告和 Git commit 循环。
+v0.3 已经把图像资产和 Godot 编辑器操作桥接的基础管线接进项目，但还没有实现 Claude Blender 自动建模、完整任意 Godot 编辑器操作、多人联机完整系统、云端登录、支付或托管用户系统。
+# v0.3 Addendum
+
+- Standalone Godot Project panel creates Godot projects with the Hastur editor plugin copied and enabled automatically.
+- The dashboard can start/stop the local Hastur broker, show broker logs, and use the bound LLM to plan validated Godot operations.
+- `AGENTS.md` is the AI-facing project context; Godot changes must consult local `godot-docs/` first.
+- Hastur Operation Plugin is vendored in `hastur-operation-plugin-main/` under the MIT License. Generated projects include `THIRD_PARTY_NOTICES.md` and `licenses/HASTUR_OPERATION_PLUGIN_LICENSE.md`.
