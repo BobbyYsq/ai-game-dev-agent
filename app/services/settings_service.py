@@ -12,8 +12,8 @@ LLM_PROVIDER_DEFAULT_MODELS = {
 }
 
 IMAGE_PROVIDER_DEFAULT_MODELS = {
-    "openai": "gpt-image-1",
-    "openai_compatible": "gpt-image-1",
+    "openai": "gpt-image-1.5",
+    "openai_compatible": "gpt-image-1.5",
 }
 
 DEFAULT_SETTINGS = {
@@ -39,6 +39,7 @@ DEFAULT_SETTINGS = {
 }
 
 LEGACY_PLACEHOLDER_PROVIDER = "mo" + "ck"
+LEGACY_IMAGE_MODELS = {"", "mock-image", "gpt-image-2"}
 
 PRIVATE_SETTING_KEYS = {
     "llm_provider",
@@ -131,6 +132,15 @@ def _migrate_legacy_settings(settings: dict[str, Any]) -> None:
         settings["llm_api_key"] = settings["openai_api_key"]
     if not settings.get("image_api_key") and settings.get("openai_api_key"):
         settings["image_api_key"] = settings["openai_api_key"]
+    settings["llm_provider"] = _public_provider(str(settings.get("llm_provider", "openai")), "openai")
+    settings["image_provider"] = _public_provider(str(settings.get("image_provider", "openai")), "openai")
+    image_provider = str(settings.get("image_provider", "openai"))
+    image_model = str(settings.get("openai_image_model", ""))
+    if image_model in LEGACY_IMAGE_MODELS:
+        settings["openai_image_model"] = IMAGE_PROVIDER_DEFAULT_MODELS.get(
+            image_provider,
+            IMAGE_PROVIDER_DEFAULT_MODELS["openai"],
+        )
 
 
 def _infer_providers(update: dict[str, Any]) -> None:

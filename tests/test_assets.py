@@ -16,7 +16,8 @@ def make_project(tmp_path: Path, monkeypatch):
             return GeneratedImage(content=b"image-bytes", provider="fake", model=model)
 
     monkeypatch.setattr(asset_service, "get_image_provider", lambda: FakeImageProvider())
-    monkeypatch.setattr(asset_service, "load_private_settings", lambda: {"openai_image_model": "gpt-image-1"})
+    monkeypatch.setattr(asset_service, "load_private_settings", lambda: {"openai_image_model": "gpt-image-1.5", "image_api_key": "sk-test", "image_provider": "openai"})
+    monkeypatch.setattr("app.models.image_provider.load_private_settings", lambda: {"openai_image_model": "gpt-image-1.5", "image_api_key": "sk-test", "image_provider": "openai"})
     return project
 
 
@@ -69,3 +70,19 @@ def test_mark_blender_reference_writes_notes(tmp_path, monkeypatch):
     assert updated["use_as_blender_reference"] is True
     assert notes.exists()
     assert asset.id in notes.read_text(encoding="utf-8")
+
+
+def test_image_generation_preflight_rejects_invalid_quality(tmp_path, monkeypatch):
+    make_project(tmp_path, monkeypatch)
+
+    try:
+        asset_service.generate_image_asset(
+            project_slug="shadow-garden",
+            prompt="A haunted garden concept.",
+            purpose="concept_art",
+            quality="ultra",
+        )
+    except ValueError as exc:
+        assert "Unsupported image quality" in str(exc)
+    else:
+        raise AssertionError("expected invalid quality to fail")

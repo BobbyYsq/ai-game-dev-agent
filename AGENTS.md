@@ -24,19 +24,20 @@ This repository is a local AI game development control plane for Godot prototype
 - `app/tools/godot_templates/` writes Godot 2D/3D scenes, scripts, `project.godot`, and Hastur integration files.
 - `app/services/asset_service.py` owns image generation, asset manifests, GDD image attachment, and Blender reference notes.
 - `app/services/hastur_service.py` validates structured Godot operations and sends controlled GDScript snippets to Hastur.
-- `app/services/broker_service.py` manages the local Hastur broker process from the UI.
+- `app/services/broker_service.py` manages dashboard-started Hastur broker processes and reports readable status for external brokers already running on the configured local ports.
 - `app/services/hastur_skill_service.py` discovers vendored Hastur skills from `hastur-operation-plugin-main/.claude/skills/`.
-- `app/services/hastur_chat_service.py` binds saved LLM settings, uploaded file/image context, vendored Hastur skill instructions, and private broker token state for the single-composer LLM + Hastur chat endpoint.
-- `app/services/git_service.py` provides generated-project-scoped Git status, review, diff, log, commit, and confirmation-gated rollback helpers.
+- `app/services/hastur_chat_service.py` binds saved LLM settings, uploaded file/image context, vendored Hastur skill instructions, and private broker token state for the legacy single-composer LLM + Hastur chat endpoint.
+- `app/services/hastur_task_service.py` runs the streaming task loop: public LLM work-note deltas for the activity summary, hidden atomic planning, unified LLM-driven user prompts, per-step Hastur code generation, repair, and LLM-requested visual checkpoints.
+- `app/services/git_service.py` provides generated-project-scoped Git status, branch creation/switch/delete, save commits, merge-to-main, history graph, Godot VCS ignore metadata migration, selected-file compatibility APIs, revert, restore-file, and safe restore-to-commit helpers. Hard reset rollback is disabled.
 - `app/agent/godot_operation_planner.py` validates LLM-created Godot operation plans.
 - The dashboard is split into Management, LLM + Hastur Chat, and Image Pipeline views.
-- The Management view owns API keys, blank Godot project creation, Hastur broker controls, and the project-local Git workbench.
-- The LLM + Hastur view is a ChatGPT/OpenCode-style chat UI with one input, `/` skill detection, file/image attachments, and confirmation buttons for interruptive execution.
+- The Management view owns API keys, blank Godot project creation, readable Hastur broker controls, and a simple project-level Git workbench with branch/save/merge/delete/history/restore operations.
+- The LLM + Hastur view is a ChatGPT/OpenCode-style chat UI with one input, `/` skill detection, file/image attachments, unified LLM-driven confirmation prompts, public activity-summary work-note streaming, final result bodies, and compact manual Git controls.
 - The Image Pipeline view owns image generation, reference uploads, generated asset gallery review, GDD attachment, and Blender reference markers.
 - `hastur-operation-plugin-main/` is a vendored MIT-licensed third-party project.
 - `godot-docs/` is the local source of truth for Godot implementation details.
 
-## v0.4 Status
+## v0.5 Status
 
 Implemented:
 
@@ -49,17 +50,22 @@ Implemented:
 - Blender reference notes.
 - Structured Hastur operations and broker controls.
 - Automatic Hastur addon installation and editor-plugin enablement for newly generated Godot projects.
-- UI-managed broker start/stop/status/logs.
+- UI-managed broker start/stop/status/logs with external-broker detection and readable status cards.
 - LLM-generated Godot operation plan endpoints with schema validation.
 - Vendored Hastur skill discovery from `hastur-operation-plugin-main/.claude/skills/`.
 - Chat-style LLM + Hastur endpoint with optional uploaded file/image context and private token/base URL binding.
-- Generated-project Git status, review, diff, log, commit, and confirmation-gated rollback endpoints.
-- Blank Hastur-enabled Godot project creation with a minimal `Main.tscn` and automatic Git initialization.
+- Codex-like Hastur task sessions with streamed public LLM work notes, hidden atomic plans, unified user prompts, per-step execution, repair, LLM-requested visual checkpoints, and verification events.
+- LLM + Hastur task sessions stream provider planning notes through `thought_delta` into each message's activity summary; final task summaries render as the matching assistant response body.
+- Hastur GDScript execution normalizes indentation, strips code fences, rewrites unsafe generated identifiers such as `class_name`, treats broker compile/run failures as failed executions, and retries repair before surfacing the error.
+- Hastur repair handling accepts executable code from top-level `code`, nested `steps[].code`, fenced snippets, or bare GDScript responses.
+- Generated-project Git status, branch creation/switch/delete, project-level save commits, merge-to-main, visual history graph, Godot cache ignore/migration, revert commit, restore file from commit, and safe restore-to-commit rollback.
+- Blank Hastur-enabled Godot project creation with a minimal `Main.tscn`, Godot `.gitignore`/`.gitattributes`, and automatic Git initialization.
 - Rewritten English and Chinese docs for quickstart, UI reference, architecture, API, and file reference.
+- Local Git identity is auto-configured per generated repository so first commits do not fail on machines without global git config.
 
 Current Codex task:
 
-- The UI/provider/Git redesign has been implemented across backend, UI, docs, and tests.
+- The local Git workbench has been simplified to project-level actions, Godot cache files are ignored/migrated automatically, task activity summaries receive public LLM work notes, and the unified LLM-driven prompt modal is the only task confirmation UI.
 - Keep the UI free of advanced provider/model controls; provider detection should remain automatic from keys/saved settings.
 - Preserve the safety rule that the UI never exposes arbitrary GDScript input.
 - Keep broker defaults local-only: host `localhost`, TCP `5301`, HTTP `5302`.

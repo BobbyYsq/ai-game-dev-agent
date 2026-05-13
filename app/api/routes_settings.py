@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.models.llm_provider import get_llm_provider
+from app.models.image_provider import validate_image_generation_settings
 from app.services.settings_service import get_public_settings, update_settings
 
 router = APIRouter()
@@ -46,3 +47,11 @@ def test_llm_connection():
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"LLM connection failed: {exc}") from exc
+
+
+@router.post('/api/settings/test-image-config')
+def test_image_config():
+    try:
+        return validate_image_generation_settings()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -8,6 +8,7 @@ LEGACY_PLACEHOLDER_PROVIDER = "mo" + "ck"
 
 class LLMProvider(Protocol):
     def generate_text(self, prompt: str, system_prompt: str | None = None) -> str: ...
+    def generate_text_stream(self, prompt: str, system_prompt: str | None = None): ...
 
 
 def get_llm_provider() -> LLMProvider:

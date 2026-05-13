@@ -28,7 +28,21 @@ def test_defaults_use_current_provider_models(tmp_path, monkeypatch):
 
     assert public["llm_provider"] == "openai"
     assert public["llm_model"] == "gpt-5.5"
-    assert public["openai_image_model"] == "gpt-image-1"
+    assert public["openai_image_model"] == "gpt-image-1.5"
+
+
+def test_legacy_image_model_is_migrated(tmp_path, monkeypatch):
+    settings_file = tmp_path / "settings.json"
+    monkeypatch.setattr(settings_service, "SETTINGS_FILE", settings_file)
+    settings_service.save_private_settings({"image_provider": "openai", "openai_image_model": "gpt-image-2"})
+
+    private = settings_service.load_private_settings()
+    public = settings_service.get_public_settings()
+
+    assert private["openai_image_model"] == "gpt-image-1.5"
+    assert public["openai_image_model"] == "gpt-image-1.5"
+    assert "mock" not in public["llm_defaults"]
+    assert "mock" not in public["image_defaults"]
 
 
 def test_public_settings_hide_legacy_placeholder_provider(tmp_path, monkeypatch):

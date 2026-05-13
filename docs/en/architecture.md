@@ -17,11 +17,12 @@ Browser dashboard
 - `app/api/routes_godot_projects.py` creates blank Hastur-enabled Godot projects.
 - `app/api/routes_hastur.py` manages broker status, skills, executors, and chat-style Hastur interaction.
 - `app/api/routes_assets.py` exposes image generation and asset review actions.
-- `app/api/routes_git.py` exposes project-local Git review, commit, history, and rollback.
+- `app/api/routes_git.py` exposes project-local Git status, changed files, file diffs, selected-file commit/discard, history, revert, and restore-file actions.
 - `app/services/settings_service.py` stores private settings locally and hides secrets from public responses.
 - `app/services/hastur_chat_service.py` builds the skill-grounded LLM prompt, includes uploaded context, and executes safe Hastur code when allowed.
+- `app/services/hastur_task_service.py` runs the Codex-like Hastur task loop: stream real assistant deltas, load Godot docs and skill, build hidden atomic plans, pause for plan/choice/skill/visual confirmations, generate one Hastur snippet per step, repair failed steps, and verify broker state.
 - `app/services/asset_service.py` writes image files, manifests, GDD references, and Blender reference notes.
-- `app/services/git_service.py` wraps generated-project-scoped Git commands.
+- `app/services/git_service.py` wraps generated-project-scoped safe Git commands. Hard reset rollback is disabled; users must commit, discard selected files, revert commits, or restore selected files explicitly.
 
 ## Provider Model
 

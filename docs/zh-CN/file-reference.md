@@ -1,48 +1,19 @@
 # 文件参考
 
-## 应用入口
-
-- `app/main.py`：创建 FastAPI app，注册静态文件、模板和路由。
-- `app/templates/index.html`：管理、LLM + Hastur、图像管线三个视图的结构。
-- `app/static/js/app.js`：仪表盘状态、API 调用、skill 选择器、聊天、图像图库和 Git 工作台。
-- `app/static/css/app.css`：响应式操作界面样式。
-
-## API 路由
-
-- `app/api/routes_settings.py`：公开设置、保存设置、测试 LLM。
-- `app/api/routes_godot_projects.py`：创建空白 Godot 项目。
-- `app/api/routes_projects.py`：列出生成项目和项目详情。
-- `app/api/routes_hastur.py`：broker 控制、skill、executor、聊天和结构化操作。
-- `app/api/routes_assets.py`：图像生成、资产文件、附加到 GDD、标记 Blender 参考。
-- `app/api/routes_git.py`：项目本地 Git 状态、审查、diff、日志、提交、还原。
-
-## 服务层
-
-- `app/services/settings_service.py`：本地私有设置、provider 推断、公开设置。
-- `app/services/godot_project_service.py`：创建启用 Hastur 的空白 Godot 项目。
-- `app/services/hastur_chat_service.py`：LLM + Hastur 聊天 prompt、附件、确认和执行。
-- `app/services/hastur_skill_service.py`：发现 vendored Hastur skill。
-- `app/services/hastur_service.py`：安全结构化操作验证和 broker 执行。
-- `app/services/broker_service.py`：管理本地 Hastur broker 进程。
-- `app/services/asset_service.py`：生成图像、manifest、GDD 链接、Blender 说明。
-- `app/services/git_service.py`：生成项目范围内的 Git helper。
-
-## Provider Adapter
-
-- `app/models/openai_provider.py`：OpenAI-compatible 聊天、视觉输入和 Anthropic adapter。
-- `app/models/llm_provider.py`：根据保存设置选择文本 provider。
-- `app/models/image_provider.py`：根据保存设置选择图像 provider。
-
-## Godot 生成
-
-- `app/tools/godot_templates/base.py`：最小 `project.godot`、`Main.tscn`、目录和 Hastur addon 安装。
-- `app/tools/godot_templates/template_2d.py`：2D 原型模板。
-- `app/tools/godot_templates/template_3d.py`：3D 原型模板。
-
-## 测试
-
-- `tests/test_settings.py`：provider 推断和公开设置。
-- `tests/test_assets.py`：生成资产 manifest 和文档链接。
-- `tests/test_hastur.py`：结构化操作验证和 GDScript 构造。
-- `tests/test_hastur_skills.py`：skill 发现和聊天中隐藏 token。
-- `tests/test_git_service.py`：本地 Git 状态和需要确认的 rollback。
+- `app/main.py`：FastAPI 入口。
+- `app/api/routes_settings.py`：设置、LLM 测试、图像配置检查。
+- `app/api/routes_godot_projects.py`：空白 Godot 项目创建。
+- `app/api/routes_assets.py`：图像资产生成与审查动作。
+- `app/api/routes_hastur.py`：broker、executor、skill、旧聊天接口和 task streaming 接口。
+- `app/api/routes_git.py`：本地 Git 工作流。
+- `app/services/settings_service.py`：私有设置、公开设置、旧配置迁移。
+- `app/services/godot_project_service.py`：生成 Godot 项目、安装 Hastur、初始化 Git。
+- `app/services/asset_service.py`：图像资产、manifest、GDD 和 Blender 参考。
+- `app/services/hastur_task_service.py`：Codex-like Hastur 任务会话、真实 LLM 流式输出、计划/选择/视觉确认和 SSE 事件。
+- `app/services/hastur_chat_service.py`：兼容的一次性 LLM + Hastur 调用。
+- `app/services/git_service.py`：Git status、changed files、file diff、选中文件提交/丢弃、revert、restore-file；hard rollback 已禁用。
+- `app/tools/godot_templates/`：Godot 项目模板生成器。
+- `hastur-operation-plugin-main/`：vendored Hastur Operation Plugin。
+- `godot-docs/`：本地 Godot 文档，Godot 相关修改的依据。
+- `workspace/config/settings.json`：本地私有设置。
+- `workspace/generated_godot_projects/`：生成的 Godot 项目。

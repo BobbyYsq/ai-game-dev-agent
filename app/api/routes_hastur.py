@@ -1,9 +1,11 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Any
 
 from app.services.broker_service import broker_logs, broker_status, start_broker, stop_broker
 from app.services.hastur_chat_service import chat_with_hastur_skill
+from app.services.hastur_task_service import create_task, resume_task, stream_task_events
 from app.services.hastur_service import GodotOperation, apply_hastur_operation, hastur_executors, hastur_status
 from app.services.hastur_skill_service import list_hastur_skills
 from app.services.godot_operation_service import execute_godot_operation_plan, plan_godot_operations
@@ -46,6 +48,20 @@ class HasturChatRequest(BaseModel):
     confirmed: bool = False
     images: list[UploadedImage] = []
     attachments: list[UploadedImage] = []
+
+
+class HasturTaskRequest(BaseModel):
+    instruction: str
+    skill_name: str | None = None
+    confirmed: bool = False
+    attachments: list[UploadedImage] = []
+
+
+class HasturTaskResumeRequest(BaseModel):
+    answer: str = ""
+    confirmed: bool = False
+    choice_id: str = ""
+    revision_request: str = ""
 
 
 @router.get("/api/hastur/broker/status")
@@ -106,6 +122,55 @@ def chat_with_hastur(project_slug: str, payload: HasturChatRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Hastur chat failed: {exc}") from exc
+
+
+@router.post("/api/projects/{project_slug}/hastur/tasks")
+def create_hastur_task(project_slug: str, payload: HasturTaskRequest):
+    if not payload.instruction.strip():
+        raise HTTPException(status_code=422, detail="instruction is required")
+    try:
+        return create_task(
+            project_slug=project_slug,
+            instruction=payload.instruction.strip(),
+            skill_name=payload.skill_name,
+            attachments=[attachment.model_dump() for attachment in payload.attachments],
+            confirmed=payload.confirmed,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/api/projects/{project_slug}/hastur/tasks/{task_id}/events")
+def stream_hastur_task(project_slug: str, task_id: str):
+    try:
+        return StreamingResponse(stream_task_events(task_id), media_type="text/event-stream")
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/api/projects/{project_slug}/hastur/tasks/{task_id}/resume")
+def resume_hastur_task(project_slug: str, task_id: str, payload: HasturTaskResumeRequest):
+    try:
+        return resume_task(task_id, payload.answer, payload.confirmed, payload.choice_id, payload.revision_request)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/api/projects/{project_slug}/visual-checkpoints/{filename}")
+def get_visual_checkpoint(project_slug: str, filename: str):
+    if "/" in filename or "\\" in filename or filename.startswith("."):
+        raise HTTPException(status_code=400, detail="invalid checkpoint filename")
+    try:
+        from app.services.asset_service import get_project_dir
+
+        path = get_project_dir(project_slug) / "assets" / "generated" / "visual_checkpoints" / filename
+        if not path.exists():
+            raise FileNotFoundError(f"Visual checkpoint not found: {filename}")
+        return FileResponse(path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/api/projects/{project_slug}/hastur/apply-operation")

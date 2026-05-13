@@ -25,6 +25,8 @@ def test_create_godot_project_installs_and_enables_hastur(tmp_path, monkeypatch)
     assert "[input]" not in project_godot
     assert (project / "THIRD_PARTY_NOTICES.md").exists()
     assert (project / "licenses/HASTUR_OPERATION_PLUGIN_LICENSE.md").exists()
+    assert (project / ".gitignore").exists()
+    assert (project / ".gitattributes").exists()
 
 
 def test_create_godot_project_initializes_git_by_default(tmp_path, monkeypatch):
@@ -43,3 +45,26 @@ def test_create_godot_project_initializes_git_by_default(tmp_path, monkeypatch):
     )
 
     assert calls == [("init", "git-garden"), ("commit", "Initial Godot project")]
+
+
+def test_create_godot_project_handles_existing_clean_project(tmp_path, monkeypatch):
+    root = tmp_path / "generated"
+    monkeypatch.setattr(godot_project_service, "GENERATED_PROJECTS_DIR", root)
+    monkeypatch.setattr(godot_project_service, "init_repo", lambda path: None)
+    monkeypatch.setattr(
+        godot_project_service,
+        "commit_all",
+        lambda path, message: {"success": True, "committed": False, "message": "No local changes to commit."},
+    )
+
+    result = godot_project_service.create_godot_project(
+        project_name="Git Garden",
+        game_type="2D top-down action",
+        project_template="2d",
+        broker_host="localhost",
+        broker_port=5301,
+    )
+
+    assert result.success is True
+    assert result.git["committed"] is False
+    assert "no new changes" in result.message.lower()

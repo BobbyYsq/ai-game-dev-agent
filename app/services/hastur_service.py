@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Literal
 
 import httpx
@@ -64,6 +65,15 @@ class HasturExecutePayload(BaseModel):
     type: str | None = None
 
 
+class EmptyGDScriptError(ValueError):
+    pass
+
+
+GDSCRIPT_IDENTIFIER_REWRITES = {
+    "class_name": "node_type_name",
+}
+
+
 def get_hastur_settings() -> dict[str, Any]:
     settings = load_private_settings()
     return {
@@ -117,6 +127,68 @@ def godot_value(value: str | int | float | bool | None) -> str:
     if isinstance(value, (int, float)):
         return str(value)
     return godot_string("" if value is None else str(value))
+
+
+def normalize_gdscript_code(code: str) -> str:
+    text = _strip_code_fence(code).replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+    if not text.strip():
+        raise EmptyGDScriptError("GDScript snippet is empty.")
+
+    normalized_lines = []
+    for line in text.split("\n"):
+        if not line.strip():
+            normalized_lines.append("")
+            continue
+        match = re.match(r"^[\t ]+", line)
+        if not match:
+            normalized_lines.append(_rewrite_unsafe_identifiers(line.rstrip()))
+            continue
+        leading = match.group(0)
+        columns = 0
+        for char in leading:
+            columns += 4 if char == "\t" else 1
+        tabs = max(1, (columns + 3) // 4)
+        normalized_lines.append(("\t" * tabs) + _rewrite_unsafe_identifiers(line[len(leading) :].rstrip()))
+    return "\n".join(normalized_lines).strip("\n")
+
+
+def _strip_code_fence(code: str) -> str:
+    text = code.strip()
+    fenced = re.fullmatch(r"```(?:gdscript|gd|gds|text)?\s*\n?(.*?)\n?```", text, re.DOTALL | re.IGNORECASE)
+    return fenced.group(1) if fenced else text
+
+
+def _rewrite_unsafe_identifiers(line: str) -> str:
+    result = line
+    for original, replacement in GDSCRIPT_IDENTIFIER_REWRITES.items():
+        result = re.sub(rf"\b{re.escape(original)}\b", replacement, result)
+    return result
+
+
+def _broker_failure_message(broker_response: Any) -> str | None:
+    data = _execution_payload(broker_response)
+    if not isinstance(data, dict):
+        return None
+    if data.get("success") is False:
+        return str(data.get("message") or data.get("error") or "Hastur broker reported failure.")
+    if data.get("compile_success") is False:
+        detail = data.get("compile_error") or data.get("error") or "Unknown compile error."
+        return f"Hastur compile failed: {detail}"
+    if data.get("run_success") is False:
+        detail = data.get("run_error") or data.get("error") or "Unknown runtime error."
+        return f"Hastur run failed: {detail}"
+    return None
+
+
+def _execution_payload(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    if "compile_success" in value or "run_success" in value:
+        return value
+    data = value.get("data")
+    if isinstance(data, dict):
+        return _execution_payload(data)
+    return value
 
 
 def build_gdscript(operation: GodotOperation) -> str:
@@ -196,7 +268,7 @@ def apply_hastur_operation(project_slug: str, operation: GodotOperation, executo
     if not settings["enabled"]:
         return HasturExecuteResult(success=False, message="Hastur bridge is disabled.")
 
-    gdscript = build_gdscript(operation)
+    gdscript = normalize_gdscript_code(build_gdscript(operation))
     payload = HasturExecutePayload(code=gdscript, project_path=str(project_dir), executor_id=executor_id)
     try:
         with httpx.Client(timeout=15.0) as client:
@@ -210,9 +282,10 @@ def apply_hastur_operation(project_slug: str, operation: GodotOperation, executo
                 broker_response = response.json()
             except ValueError:
                 broker_response = response.text
+            failure = _broker_failure_message(broker_response)
             return HasturExecuteResult(
-                success=True,
-                message="Hastur operation executed.",
+                success=failure is None,
+                message=failure or "Hastur operation executed.",
                 broker_response=broker_response,
                 gdscript=gdscript,
             )
@@ -230,8 +303,12 @@ def apply_hastur_code(
     settings = get_hastur_settings()
     if not settings["enabled"]:
         return HasturExecuteResult(success=False, message="Hastur bridge is disabled.")
+    try:
+        gdscript = normalize_gdscript_code(code)
+    except EmptyGDScriptError as exc:
+        return HasturExecuteResult(success=False, message=str(exc), gdscript=code)
     payload = HasturExecutePayload(
-        code=code,
+        code=gdscript,
         project_path=str(project_dir),
         executor_id=executor_id,
         type=executor_type,
@@ -248,11 +325,12 @@ def apply_hastur_code(
                 broker_response = response.json()
             except ValueError:
                 broker_response = response.text
+            failure = _broker_failure_message(broker_response)
             return HasturExecuteResult(
-                success=True,
-                message="Hastur skill code executed.",
+                success=failure is None,
+                message=failure or "Hastur skill code executed.",
                 broker_response=broker_response,
-                gdscript=code,
+                gdscript=gdscript,
             )
     except httpx.HTTPError as exc:
-        return HasturExecuteResult(success=False, message=f"Hastur execute failed: {exc}", gdscript=code)
+        return HasturExecuteResult(success=False, message=f"Hastur execute failed: {exc}", gdscript=gdscript)

@@ -2,6 +2,14 @@ import httpx
 from openai import OpenAI
 
 
+def _chat_messages(prompt: str, system_prompt: str | None = None) -> list[dict[str, str]]:
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+    return messages
+
+
 class OpenAIProvider:
     def __init__(
         self,
@@ -21,12 +29,21 @@ class OpenAIProvider:
         self.supports_images = supports_images
 
     def generate_text(self, prompt: str, system_prompt: str | None = None) -> str:
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-        resp = self.client.chat.completions.create(model=self.model, messages=messages)
+        resp = self.client.chat.completions.create(model=self.model, messages=_chat_messages(prompt, system_prompt))
         return resp.choices[0].message.content or ""
+
+    def generate_text_stream(self, prompt: str, system_prompt: str | None = None):
+        stream = self.client.chat.completions.create(
+            model=self.model,
+            messages=_chat_messages(prompt, system_prompt),
+            stream=True,
+        )
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = getattr(chunk.choices[0].delta, "content", None)
+            if delta:
+                yield delta
 
     def generate_text_with_images(
         self,
@@ -80,6 +97,9 @@ class AnthropicProvider:
         data = response.json()
         chunks = data.get("content", [])
         return "".join(chunk.get("text", "") for chunk in chunks if chunk.get("type") == "text")
+
+    def generate_text_stream(self, prompt: str, system_prompt: str | None = None):
+        yield self.generate_text(prompt, system_prompt)
 
     def generate_text_with_images(
         self,

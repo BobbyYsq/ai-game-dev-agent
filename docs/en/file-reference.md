@@ -14,7 +14,7 @@
 - `app/api/routes_projects.py`: generated project listing and details.
 - `app/api/routes_hastur.py`: broker controls, skills, executors, chat, and structured operations.
 - `app/api/routes_assets.py`: image generation, asset files, GDD attach, Blender reference.
-- `app/api/routes_git.py`: project-local Git status, review, diff, log, commit, rollback.
+- `app/api/routes_git.py`: project-local Git status, changed files, diff, log, selected-file commit/discard, revert, restore-file, and deprecated rollback.
 
 ## Services
 
@@ -25,7 +25,7 @@
 - `app/services/hastur_service.py`: safe structured operation validation and broker execution.
 - `app/services/broker_service.py`: managed local Hastur broker process.
 - `app/services/asset_service.py`: generated images, manifests, GDD links, Blender notes.
-- `app/services/git_service.py`: generated-project Git helper commands.
+- `app/services/git_service.py`: generated-project safe Git helper commands; hard reset rollback is disabled.
 
 ## Provider Adapters
 
@@ -45,4 +45,4 @@
 - `tests/test_assets.py`: generated asset manifest and document links.
 - `tests/test_hastur.py`: structured operation validation and GDScript construction.
 - `tests/test_hastur_skills.py`: skill discovery and token hiding in chat.
-- `tests/test_git_service.py`: local Git status and confirmation-gated rollback.
+- `tests/test_git_service.py`: local Git status, selected-file commit/discard, revert, restore-file, and disabled rollback.

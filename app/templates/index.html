@@ -48,6 +48,7 @@
           <div class="button-row">
             <button type="button" onclick="saveSettings()" data-i18n="save_settings">Save Settings</button>
             <button type="button" class="secondary" onclick="testLLM()" data-i18n="test_connection">Test LLM</button>
+            <button type="button" class="secondary" onclick="testImageConfig()" data-i18n="test_image_config">Test Image Config</button>
           </div>
           <p id="settingsMessage" class="message" role="status"></p>
         </section>
@@ -69,22 +70,6 @@
           <div id="project_output" class="inline-result"></div>
         </section>
 
-        <section class="panel project-workbench" aria-labelledby="workbench-title">
-          <div class="panel-heading">
-            <h2 id="workbench-title" data-i18n="project_workbench">Project Workbench</h2>
-            <button type="button" class="secondary compact" onclick="loadProjects()" data-i18n="refresh">Refresh</button>
-          </div>
-          <p class="panel-note" data-i18n="workbench_note">Select a generated project, inspect its files, and run a local Codex/OpenCode-style Git review loop.</p>
-          <div class="workbench-layout">
-            <aside>
-              <ul id="recent_projects" class="project-list"></ul>
-            </aside>
-            <article id="project_detail_pane" class="detail-pane">
-              <p class="muted-row" data-i18n="select_project_hint">Select a project to inspect it.</p>
-            </article>
-          </div>
-        </section>
-
         <section class="panel hastur-config-panel" aria-labelledby="hastur-config-title">
           <div class="panel-heading">
             <h2 id="hastur-config-title" data-i18n="hastur_config_title">Hastur Broker</h2>
@@ -101,6 +86,22 @@
           <p id="hasturMessage" class="message" role="status"></p>
           <div id="broker_output" class="mini-output"></div>
         </section>
+
+        <section class="panel project-workbench" aria-labelledby="workbench-title">
+          <div class="panel-heading">
+            <h2 id="workbench-title" data-i18n="project_workbench">Project Workbench</h2>
+            <button type="button" class="secondary compact" onclick="loadProjects()" data-i18n="refresh">Refresh</button>
+          </div>
+          <p class="panel-note" data-i18n="workbench_note">Select a generated project, inspect its files, and use the manual Git workbench for selected-file actions.</p>
+          <div class="workbench-layout">
+            <aside>
+              <ul id="recent_projects" class="project-list"></ul>
+            </aside>
+            <article id="project_detail_pane" class="detail-pane">
+              <p class="muted-row" data-i18n="select_project_hint">Select a project to inspect it.</p>
+            </article>
+          </div>
+        </section>
       </div>
     </section>
 
@@ -110,7 +111,7 @@
           <div class="chat-topbar">
             <div>
               <h2 id="chat-title" data-i18n="chat_title">LLM + Hastur Chat</h2>
-              <p class="panel-note" data-i18n="chat_note">Use one input. Type `/` to choose a vendored Hastur skill; token and broker URL stay private.</p>
+              <p class="panel-note" data-i18n="chat_note">Use one input. The agent streams LLM text, asks for choices when needed, and executes confirmed steps through Hastur.</p>
             </div>
             <div class="chat-controls">
               <label>
@@ -120,16 +121,29 @@
               <span id="chatReadiness" class="status-pill">ready</span>
             </div>
           </div>
-          <div id="chat_messages" class="chat-messages" aria-live="polite"></div>
-          <div id="skill_picker" class="skill-picker hidden"></div>
-          <div id="chat_attachment_list" class="attachment-list"></div>
-          <div class="composer">
-            <button type="button" class="icon-button" onclick="triggerChatFiles()" title="Attach files" aria-label="Attach files">+</button>
-            <textarea id="chat_instruction" rows="2" data-i18n-placeholder="chat_placeholder" placeholder="/godot-remote-executor Add a Label node to Main.tscn and save the scene."></textarea>
-            <button type="button" onclick="sendHasturChat()" data-i18n="send_to_llm">Send</button>
-            <input id="chat_files" type="file" class="visually-hidden" multiple>
+          <div class="agent-workspace">
+            <div>
+              <div id="chat_messages" class="chat-messages" aria-live="polite"></div>
+              <div id="skill_picker" class="skill-picker hidden"></div>
+              <div id="chat_attachment_list" class="attachment-list"></div>
+              <div class="composer">
+                <button type="button" class="icon-button" onclick="triggerChatFiles()" title="Attach files" aria-label="Attach files">+</button>
+                <textarea id="chat_instruction" rows="2" data-i18n-placeholder="chat_placeholder" placeholder="/godot-remote-executor Add a Label node to Main.tscn and save the scene."></textarea>
+                <button type="button" id="chat_send_button" onclick="sendHasturChat()" data-i18n="send_to_llm">Send</button>
+                <input id="chat_files" type="file" class="visually-hidden" multiple>
+              </div>
+              <p id="chatMessage" class="message" role="status"></p>
+            </div>
+            <aside class="chat-git-panel">
+              <div class="panel-heading compact-heading">
+                <h3 data-i18n="local_git">Local Git</h3>
+                <button type="button" class="secondary compact" onclick="refreshChatGit()" data-i18n="refresh">Refresh</button>
+              </div>
+              <p class="panel-note" data-i18n="chat_git_note">Git actions are manual. Open the workbench to review, commit, or restore selected files.</p>
+              <button type="button" class="secondary compact" onclick="openGitWorkbench()" data-i18n="open_git_workbench">Open Git Workbench</button>
+              <div id="chat_git_output" class="mini-output"></div>
+            </aside>
           </div>
-          <p id="chatMessage" class="message" role="status"></p>
         </section>
       </div>
     </section>
@@ -181,7 +195,11 @@
           </label>
           <label>
             <span data-i18n="asset_uploads">Reference Files and Images</span>
-            <input id="asset_files" type="file" multiple>
+            <div class="file-picker-row">
+              <button type="button" class="secondary" onclick="triggerAssetFiles()" data-i18n="asset_file_button">Choose files</button>
+              <span id="asset_files_label" class="muted-row" data-i18n="asset_no_files">No files selected</span>
+            </div>
+            <input id="asset_files" type="file" class="visually-hidden" multiple>
           </label>
           <div class="button-row">
             <button type="button" onclick="saveAssetSettings()" data-i18n="save_asset_settings">Save Image Defaults</button>
@@ -192,6 +210,16 @@
         </section>
       </div>
     </section>
+
+    <div id="task_modal" class="task-modal hidden" role="dialog" aria-modal="true" aria-labelledby="task_modal_title">
+      <div class="task-modal-card">
+        <div class="panel-heading compact-heading">
+          <h3 id="task_modal_title">Task review</h3>
+          <button type="button" class="secondary compact" onclick="closeTaskModal()" data-i18n="close">Close</button>
+        </div>
+        <div id="task_modal_body"></div>
+      </div>
+    </div>
   </main>
 
   <script src="/static/js/app.js"></script>

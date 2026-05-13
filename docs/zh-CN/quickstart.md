@@ -4,77 +4,73 @@
 
 Windows：
 
-```text
+```powershell
 start_windows.cmd
 ```
 
 macOS：
 
 ```bash
-chmod +x start_macos.command
 ./start_macos.command
 ```
 
-Linux：
+Linux/Unix：
 
 ```bash
-chmod +x start_unix.sh
 ./start_unix.sh
 ```
 
-启动脚本会创建本地 `runtime/` 环境、安装依赖、选择可用 FastAPI 端口，并打开仪表盘。
+启动后打开 `http://localhost:8000/`。
 
-## 2. 配置 API key
+## 2. 配置 API
 
 1. 打开 **管理**。
-2. 在 **LLM API 密钥** 中粘贴文本模型 API key。
-3. 在 **图像 API 密钥** 中粘贴支持图像生成的 API key。使用 OpenAI 时，如果账号有图像权限，可以填写同一个 key。
+2. 在 **LLM API 密钥** 中粘贴 ChatGPT/OpenAI API key。
+3. 在 **图像 API 密钥** 中粘贴可使用图像生成的 API key。
 4. 点击 **保存设置**。
-5. 点击 **测试 LLM**。如果 key、账号权限或网络有问题，界面会直接显示具体错误。
+5. 点击 **测试 LLM** 检查文本模型。
+6. 点击 **检查图像配置** 检查图像 key 和本地默认参数。
 
-界面不再暴露 provider、模型、base URL 等高级选项。后端会根据 key 和已保存设置自动选择提供商与默认模型。OpenAI 图像生成使用后端默认图像模型，并遵循 OpenAI Image API 的调用方式。
+## 3. 创建 Godot 项目
 
-## 3. 创建并打开 Godot 项目
-
-1. 在 **空白 Godot 项目** 中输入项目名称。
+1. 在 **空白 Godot 项目** 输入项目名称。
 2. 点击 **创建项目**。
-3. 用 Godot 4 打开 `workspace/generated_godot_projects/<project-slug>/`。
-4. 确认项目中存在 `addons/hasturoperationgd/`，并且 `project.godot` 已启用插件。
-5. 打开 `res://scenes/Main.tscn`。
+3. 项目会生成在 `workspace/generated_godot_projects/<slug>/`。
+4. 使用 Godot 打开该项目，确认插件列表中 Hastur 已启用。
 
-Godot 本地文档说明编辑器插件应放在 `addons/` 下，并通过 `Project > Project Settings > Plugins` 启用。生成项目遵循这个结构，主场景路径写入 `project.godot`。
+## 4. 启动 Hastur
 
-## 4. 启动 Hastur 并与 Godot 交互
+1. 在 **Hastur Broker** 点击 **启动 Broker**。
+2. 打开 Godot 项目并等待 executor 连接。
+3. 点击 **Executors** 检查连接状态。
 
-1. 在 **Hastur Broker** 中点击 **启动 Broker**。
-2. 打开或重新加载生成的 Godot 项目，让 executor 连接 broker。
-3. 点击 **Executors**，确认已有 Godot executor。
-4. 打开 **LLM + Hastur**。
-5. 选择项目。
-6. 在输入框中输入 `/`，选择内置 Hastur skill。
-7. 需要时用 `+` 上传参考文件或图片。
-8. 发送请求。安全操作会通过 Hastur 执行；可能打断编辑器或运行状态的操作会先出现确认按钮。
+## 5. 使用 LLM + Hastur
 
-界面不会让用户输入任意 GDScript。LLM 会读取 vendored skill 指令，broker URL 与 token 由应用私下注入。
+1. 打开 **LLM + Hastur**。
+2. 选择项目。
+3. 在输入框输入任务，也可以输入 `/` 选择内置 skill。
+4. 上传需要的图片或文件。
+5. 点击 **发送**。
+6. LLM 回复会流式显示；执行状态只出现在活动摘要中，不再伪装成 assistant 回复。
+7. 如果 agent 需要计划确认、方案选择、skill 确认或视觉调整，会弹出临时窗口等待你选择。
+8. 确认后任务会按最小步骤生成代码、发送给 Hastur 执行，并只针对当前步骤修复失败。
 
-## 5. 生成并审查图像
+## 6. 使用图像管线
 
 1. 打开 **图像管线**。
-2. 选择项目和用途。
-3. 选择尺寸与质量。
-4. 输入图像提示词，可附加参考文件或图片。
-5. 点击 **生成图像**。
-6. 在图库中审查结果。
-7. 点击 **批准到 GDD**，把图片写入 `docs/GDD.md`。
-8. 点击 **标记 Blender 参考**，把图片写入 `docs/BLENDER_REFERENCE_NOTES.md`。
+2. 选择项目、用途、尺寸和质量。
+3. 输入提示词，可上传参考图片或文件。
+4. 点击 **生成图像**。
+5. 在图库中审查结果，可批准加入 GDD、标记为 Blender 参考或重新生成。
 
-## 6. 使用本地 Git
+## 7. 使用本地 Git
 
-1. 打开 **管理** 中的 **项目工作台**。
-2. 选择项目。
-3. 点击 **审查改动** 查看状态、文件列表和 diff。
-4. 点击 **提交**，输入提交信息，并提交项目中的全部本地改动。
-5. 点击 **历史** 查看最近 commit。
-6. 点击 **还原**，输入 commit hash，先预览，再确认执行。
+在 **项目工作台** 中执行 Git 操作；**LLM + Hastur** 页只显示分支和改动数量，并提供打开 Git 工作台的入口：
 
-当前版本只管理本地 Git，不包含远程 push 或 PR 流程。
+- **审查改动**：查看 changed files、staged/unstaged/untracked 状态和按文件 diff。
+- **提交**：选择文件并输入提交信息后手动提交。
+- **历史**：查看最近 commit。
+- **丢弃选中文件**：只丢弃你选择的文件改动。
+- **反向提交/恢复文件**：使用 `revert commit` 或从指定 commit 恢复指定文件。
+
+当前版本不做 push、PR 或远程 Git 操作。

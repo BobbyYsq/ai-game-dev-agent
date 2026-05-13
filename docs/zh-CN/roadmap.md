@@ -1,20 +1,15 @@
 # 路线图
 
-## v0.3
+## 当前重点
 
-图像生成、资产 manifest、GDD 图片关联、Blender 参考说明，以及第一版安全 Hastur 桥接接口。
+- 稳定图像生成错误处理，确保配置或 provider 问题显示为可理解消息。
+- 继续强化 LLM + Hastur 的多步任务流程、视觉 checkpoint 和修复质量。
+- 完善本地 Git 工作台的按文件 diff、手动提交、丢弃、revert 和 restore-file 体验。
+- 保持 UI 简洁：不暴露 provider/model/base URL 控件，不暴露任意 GDScript 输入。
 
-## v0.4
+## 后续方向
 
-Claude Blender provider、Blender Python 脚本生成、headless Blender 执行，以及 `.glb` / `.fbx` 导出。
-
-## v0.5
-
-更完整的 Hastur / Godot 编辑器自动化，包括 LLM operation plan、读取编辑器状态、场景/节点/信号工作流。
-
-## v0.6
-
-试玩反馈、修复规划、代码/场景更新、Review Report 刷新和 Git commit 循环。
-# v0.3 Addendum
-
-Standalone Godot project creation, automatic Hastur addon enablement, dashboard broker controls, LLM operation planning, and third-party MIT notices are part of the v0.3 completion work.
+- 更细的 Godot docs 检索。
+- 更丰富的验证步骤，例如截图审查和 Godot headless 检查。
+- 可配置的项目级 workflow/skills。
+- 更完善的资产导入与 3D/Blender 工作流。

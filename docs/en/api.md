@@ -26,6 +26,10 @@ The backend infers providers and model defaults. Public provider lists do not in
 
 Runs a small LLM request and returns a readable provider error on failure.
 
+`POST /api/settings/test-image-config`
+
+Runs local image configuration validation without spending image generation credits.
+
 ## Projects
 
 `POST /api/godot-projects/create`
@@ -112,13 +116,40 @@ Sends a chat-style instruction through a vendored Hastur skill. The app injects 
 
 If the operation is interruptive, the response sets `requires_confirmation` and the UI must resend with `confirmed: true`.
 
+Codex-like task streaming:
+
+- `POST /api/projects/{project_slug}/hastur/tasks`
+- `GET /api/projects/{project_slug}/hastur/tasks/{task_id}/events`
+- `POST /api/projects/{project_slug}/hastur/tasks/{task_id}/resume`
+
+Task events use server-sent events. Event types include `assistant_delta`, `activity`, `context`, `plan_review`, `choice_request`, `skill_confirmation`, `visual_checkpoint`, `step_result`, `question`, `verification`, `final`, and `error`. `question` is kept for compatibility; new clients should render the more specific modal events.
+
+`resume` accepts:
+
+```json
+{
+  "answer": "optional user feedback",
+  "confirmed": true,
+  "choice_id": "keep",
+  "revision_request": "make the plan smaller"
+}
+```
+
+Visual checkpoints are served from:
+
+- `GET /api/projects/{project_slug}/visual-checkpoints/{filename}`
+
 ## Git
 
 - `GET /api/projects/{project_slug}/git/status`
 - `GET /api/projects/{project_slug}/git/review`
 - `GET /api/projects/{project_slug}/git/diff`
+- `GET /api/projects/{project_slug}/git/changes`
 - `GET /api/projects/{project_slug}/git/log`
 - `POST /api/projects/{project_slug}/git/commit`
+- `POST /api/projects/{project_slug}/git/discard`
+- `POST /api/projects/{project_slug}/git/revert`
+- `POST /api/projects/{project_slug}/git/restore-file`
 - `POST /api/projects/{project_slug}/git/rollback`
 
-Rollback is confirmation-gated: first call with `confirm: false` to preview, then call with `confirm: true` to execute.
+`commit` accepts an optional `paths` list and only stages/commits those selected files when provided. `rollback` is deprecated and returns a safe error instead of running `git reset --hard`; use discard selected files, revert commit, or restore selected files from a commit.

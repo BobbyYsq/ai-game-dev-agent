@@ -1,15 +1,15 @@
 # AI Game Development Agent
 
-A local control plane for Godot prototypes. It creates Hastur-enabled Godot projects, runs a ChatGPT/OpenCode-style Hastur chat workflow, generates image references, and manages local Git review/commit/restore loops for generated projects.
+A local control plane for Godot prototypes. It creates Hastur-enabled Godot projects, runs a streaming LLM + Hastur task workflow, generates image references, and provides a manual safe Git workbench for generated projects.
 
 ## Features
 
 - Simple API setup with LLM and image key fields. Provider and model defaults are inferred by the backend.
 - Blank Godot project creation with `addons/hasturoperationgd/`, enabled editor plugin settings, `Main.tscn`, notices, and local Git initialization.
 - Managed local Hastur broker controls for start, stop, status, logs, and executor discovery.
-- Chat UI with one composer, `/` skill detection, file/image attachments, safe execution, and confirmation for interruptive operations.
+- Chat UI with one composer, `/` skill detection, file/image attachments, real LLM streaming, plan/choice/skill/visual confirmation modals, and step-by-step Hastur execution.
 - Image generation and review gallery with GDD attachment and Blender reference notes.
-- Project-local Git workbench for details, review changes, commit, history, and confirmation-gated restore.
+- Project-local Git workbench for selected-file diffs, manual commits, selected-file discard, revert commit, and restore-file actions.
 
 ## Quick Start
 

@@ -4,11 +4,11 @@
 
 `GET /api/settings`
 
-只返回公开设置。API key 和 Hastur token 不会返回。
+返回公开设置状态。不会返回 API key 或 Hastur token。
 
 `POST /api/settings`
 
-保存本地设置到 `workspace/config/settings.json`。仪表盘常用 payload：
+保存本地设置到 `workspace/config/settings.json`。
 
 ```json
 {
@@ -20,17 +20,19 @@
 }
 ```
 
-后端会自动推断 provider 和默认模型。公开 provider 列表不包含离线占位 provider。
-
 `POST /api/settings/test-llm`
 
-发送一次小型 LLM 请求。失败时返回可读 provider 错误。
+发送小型 LLM 请求，用于检查 LLM key 是否可用。
+
+`POST /api/settings/test-image-config`
+
+只做本地图像配置检查，不调用付费图像生成接口。
 
 ## 项目
 
 `POST /api/godot-projects/create`
 
-创建启用 Hastur 的空白 Godot 项目，并初始化本地 Git。
+创建启用 Hastur 的空白 Godot 项目，并初始化本地 Git。重复创建同名项目时会刷新文件；如果 Git 没有新增改动，会返回成功消息而不是 500。
 
 ```json
 {
@@ -45,13 +47,13 @@
 
 `GET /api/projects/{project_slug}`
 
-返回项目详情和文件列表。
+返回项目路径和文件列表。
 
 ## 图像资产
 
 `POST /api/projects/{project_slug}/assets/images/generate`
 
-使用已保存图像设置生成图像资产。
+使用保存的图像 API key 生成图片，写入项目缓存并更新 manifest。
 
 ```json
 {
@@ -62,19 +64,7 @@
 }
 ```
 
-后端选择默认图像模型。生成文件保存到：
-
-```text
-workspace/generated_godot_projects/<project_slug>/assets/generated/cache/images/
-```
-
-manifest 保存到：
-
-```text
-workspace/generated_godot_projects/<project_slug>/assets/generated/asset_manifest.json
-```
-
-其他资产接口：
+相关接口：
 
 - `GET /api/projects/{project_slug}/assets`
 - `GET /api/projects/{project_slug}/assets/{asset_id}/file`
@@ -83,6 +73,8 @@ workspace/generated_godot_projects/<project_slug>/assets/generated/asset_manifes
 
 ## Hastur
 
+Broker 与 skill：
+
 - `POST /api/hastur/broker/start`
 - `POST /api/hastur/broker/stop`
 - `GET /api/hastur/broker/status`
@@ -90,15 +82,22 @@ workspace/generated_godot_projects/<project_slug>/assets/generated/asset_manifes
 - `GET /api/hastur/executors`
 - `GET /api/hastur/skills`
 
-`POST /api/projects/{project_slug}/hastur/chat`
+兼容旧聊天接口：
 
-通过 vendored Hastur skill 发送聊天式指令。应用会私下注入 broker URL 和 token。
+- `POST /api/projects/{project_slug}/hastur/chat`
+
+Codex-like 任务接口：
+
+- `POST /api/projects/{project_slug}/hastur/tasks`
+- `GET /api/projects/{project_slug}/hastur/tasks/{task_id}/events`
+- `POST /api/projects/{project_slug}/hastur/tasks/{task_id}/resume`
+
+任务创建示例：
 
 ```json
 {
   "instruction": "/godot-remote-executor Add a Label node and save the scene.",
   "skill_name": "godot-remote-executor",
-  "execute": true,
   "confirmed": false,
   "attachments": [
     {
@@ -110,15 +109,21 @@ workspace/generated_godot_projects/<project_slug>/assets/generated/asset_manifes
 }
 ```
 
-如果操作可能打断状态，响应会设置 `requires_confirmation`，UI 需要用 `confirmed: true` 再发送一次。
+SSE 事件类型包括 `status`、`context`、`plan`、`question`、`hastur_execution`、`verification`、`git`、`final` 和 `error`。
+
+新任务流还会发送 `assistant_delta`、`activity`、`plan_review`、`choice_request`、`skill_confirmation`、`visual_checkpoint`、`step_result`、`final` 和 `error`。`resume` 请求体支持 `answer`、`confirmed`、`choice_id` 和 `revision_request`。视觉 checkpoint 文件可通过 `GET /api/projects/{project_slug}/visual-checkpoints/{filename}` 读取。
 
 ## Git
 
 - `GET /api/projects/{project_slug}/git/status`
 - `GET /api/projects/{project_slug}/git/review`
 - `GET /api/projects/{project_slug}/git/diff`
+- `GET /api/projects/{project_slug}/git/changes`
 - `GET /api/projects/{project_slug}/git/log`
 - `POST /api/projects/{project_slug}/git/commit`
+- `POST /api/projects/{project_slug}/git/discard`
+- `POST /api/projects/{project_slug}/git/revert`
+- `POST /api/projects/{project_slug}/git/restore-file`
 - `POST /api/projects/{project_slug}/git/rollback`
 
-rollback 需要确认：先用 `confirm: false` 预览，再用 `confirm: true` 执行。
+`commit` 可传入 `paths`，只提交选中文件。`rollback` 已废弃，会返回安全错误，不再执行 `git reset --hard`；请使用丢弃选中文件、反向提交或从指定 commit 恢复文件。
