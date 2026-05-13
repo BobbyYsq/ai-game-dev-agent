@@ -12,7 +12,14 @@ from typing import Any
 import httpx
 
 from app.config import HASTUR_BROKER_DIR
-from app.services.settings_service import load_private_settings, save_private_settings
+from app.services.settings_service import (
+    DEFAULT_HASTUR_HOST,
+    DEFAULT_HASTUR_HTTP_PORT,
+    DEFAULT_HASTUR_TCP_PORT,
+    load_private_settings,
+    save_private_settings,
+    _safe_hastur_port,
+)
 
 
 _process: subprocess.Popen | None = None
@@ -67,9 +74,9 @@ def _load_or_create_config(host: str | None = None, http_port: int | None = None
     settings = load_private_settings()
     token = str(settings.get("hastur_auth_token") or secrets.token_hex(32))
     config = BrokerConfig(
-        host=host or str(settings.get("hastur_broker_host", "localhost")),
-        http_port=int(http_port or settings.get("hastur_broker_http_port", 5302)),
-        tcp_port=int(tcp_port or settings.get("hastur_broker_tcp_port", 5301)),
+        host=host or str(settings.get("hastur_broker_host", DEFAULT_HASTUR_HOST)),
+        http_port=_safe_hastur_port(http_port or settings.get("hastur_broker_http_port"), DEFAULT_HASTUR_HTTP_PORT),
+        tcp_port=_safe_hastur_port(tcp_port or settings.get("hastur_broker_tcp_port"), DEFAULT_HASTUR_TCP_PORT),
         auth_token=token,
     )
     settings.update(
@@ -91,9 +98,9 @@ def broker_status() -> dict[str, Any]:
     global _process
     managed_running = _process is not None and _process.poll() is None
     settings = load_private_settings()
-    host = settings.get("hastur_broker_host", "localhost")
-    http_port = int(settings.get("hastur_broker_http_port", 5302))
-    tcp_port = int(settings.get("hastur_broker_tcp_port", 5301))
+    host = settings.get("hastur_broker_host", DEFAULT_HASTUR_HOST)
+    http_port = _safe_hastur_port(settings.get("hastur_broker_http_port"), DEFAULT_HASTUR_HTTP_PORT)
+    tcp_port = _safe_hastur_port(settings.get("hastur_broker_tcp_port"), DEFAULT_HASTUR_TCP_PORT)
     base_url = str(settings.get("hastur_base_url", f"http://{host}:{http_port}")).rstrip("/")
     token = str(settings.get("hastur_auth_token") or "")
     probe = _probe_broker(base_url, token)

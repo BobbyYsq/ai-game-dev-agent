@@ -79,7 +79,8 @@ def test_complex_task_prompts_for_plan_confirmation_without_running_first(tmp_pa
             return json.dumps(
                 {
                     "summary": "Village plan ready",
-                    "requires_user_approval": False,
+                    "mode": "plan",
+                    "requires_user_approval": True,
                     "steps": [
                         {"title": "Create land", "goal": "Create the terrain"},
                         {"title": "Add sun", "goal": "Add conservative sunny lighting", "needs_visual_check": False},
@@ -100,6 +101,48 @@ def test_complex_task_prompts_for_plan_confirmation_without_running_first(tmp_pa
     assert applied == []
 
 
+def test_direct_task_executes_without_plan_or_confirmation(tmp_path, monkeypatch):
+    _setup_project(tmp_path, monkeypatch)
+    executed = []
+
+    class FakeLLM:
+        def generate_text_stream(self, prompt, system_prompt=None):
+            yield "I can run this directly."
+
+        def generate_text(self, prompt, system_prompt=None):
+            assert "You decide whether the request needs a visible plan" in prompt
+            return json.dumps(
+                {
+                    "mode": "direct",
+                    "summary": "Print 1",
+                    "read_only": False,
+                    "steps": [],
+                    "code": 'print("1")\nexecuteContext.output("result", "1")',
+                    "final": "Printed 1",
+                }
+            )
+
+    def fake_apply(_slug, code, **_kwargs):
+        executed.append(code)
+        return HasturExecuteResult(
+            success=True,
+            message="ok",
+            gdscript=code,
+            broker_response={"data": {"outputs": [["result", "1"]]}},
+        )
+
+    monkeypatch.setattr(hastur_task_service, "get_llm_provider", lambda: FakeLLM())
+    monkeypatch.setattr(hastur_task_service, "apply_hastur_code", fake_apply)
+
+    task = hastur_task_service.create_task("shadow-garden", "打印1", "godot-remote-executor")
+    joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
+
+    assert executed == ['print("1")\nexecuteContext.output("result", "1")']
+    assert "event: user_prompt" not in joined
+    assert "Plan:" not in joined
+    assert '"message": "1"' in joined
+
+
 def test_confirmed_plan_generates_one_complete_batch(tmp_path, monkeypatch):
     _setup_project(tmp_path, monkeypatch)
     code_prompts = []
@@ -110,9 +153,10 @@ def test_confirmed_plan_generates_one_complete_batch(tmp_path, monkeypatch):
             yield "Planning."
 
         def generate_text(self, prompt, system_prompt=None):
-            if "Do not write GDScript in this planning response" in prompt:
+            if "You decide whether the request needs a visible plan" in prompt:
                 return json.dumps(
                     {
+                        "mode": "plan",
                         "summary": "Plan",
                         "requires_user_approval": False,
                         "steps": [
@@ -139,9 +183,9 @@ def test_confirmed_plan_generates_one_complete_batch(tmp_path, monkeypatch):
 
     assert len(code_prompts) == 1
     assert len(executed) == 1
-    assert "event: user_prompt" in joined
+    assert "event: user_prompt" not in joined
     assert "event: step_result" not in joined
-    assert "event: final" not in joined
+    assert "event: final" in joined
 
 
 def test_llm_user_prompt_uses_unified_prompt_event(tmp_path, monkeypatch):
@@ -188,8 +232,8 @@ def test_hastur_task_repairs_failed_step_code(tmp_path, monkeypatch):
             yield "Planning."
 
         def generate_text(self, prompt, system_prompt=None):
-            if "Do not write GDScript in this planning response" in prompt:
-                return '{"summary":"Plan","read_only":true,"steps":[{"title":"Create","goal":"Create terrain"}],"final":"Done"}'
+            if "You decide whether the request needs a visible plan" in prompt:
+                return '{"mode":"plan","summary":"Plan","read_only":true,"steps":[{"title":"Create","goal":"Create terrain"}],"final":"Done"}'
             if "previous complete Hastur GDScript batch failed" in prompt:
                 self.repair = True
                 assert "Mixed use of tabs and spaces" in prompt
@@ -222,8 +266,8 @@ def test_hastur_task_keeps_repairing_until_success(tmp_path, monkeypatch):
             yield "Planning."
 
         def generate_text(self, prompt, system_prompt=None):
-            if "Do not write GDScript in this planning response" in prompt:
-                return '{"summary":"Plan","read_only":true,"steps":[{"title":"Create","goal":"Create terrain"}],"final":"Done"}'
+            if "You decide whether the request needs a visible plan" in prompt:
+                return '{"mode":"plan","summary":"Plan","read_only":true,"steps":[{"title":"Create","goal":"Create terrain"}],"final":"Done"}'
             if "previous complete Hastur GDScript batch failed" in prompt:
                 repair_prompts.append(prompt)
                 assert "compile failed" in prompt.lower() or "runtime failed" in prompt.lower()
@@ -258,8 +302,8 @@ def test_hastur_task_final_uses_hastur_output(tmp_path, monkeypatch):
             yield "Reading the scene."
 
         def generate_text(self, prompt, system_prompt=None):
-            if "Do not write GDScript in this planning response" in prompt:
-                return '{"summary":"Plan","read_only":true,"steps":[{"title":"Read tree","goal":"Return the current scene tree"}],"final":"Repeated plan text"}'
+            if "You decide whether the request needs a visible plan" in prompt:
+                return '{"mode":"plan","summary":"Plan","read_only":true,"steps":[{"title":"Read tree","goal":"Return the current scene tree"}],"final":"Repeated plan text"}'
             assert 'executeContext.output("result", text)' in prompt
             assert "Generate ONE complete GDScript" in prompt
             return '{"code":"executeContext.output(\\"scene_tree\\", \\"Main\\\\n  Label\\")"}'
@@ -292,8 +336,8 @@ def test_visual_checkpoint_pauses_with_llm_driven_user_prompt(tmp_path, monkeypa
             yield "Planning."
 
         def generate_text(self, prompt, system_prompt=None):
-            if "Do not write GDScript in this planning response" in prompt:
-                return '{"summary":"Plan","steps":[{"title":"Add sun","goal":"Add sunny lighting","needs_visual_check":true}],"final":"Done"}'
+            if "You decide whether the request needs a visible plan" in prompt:
+                return '{"mode":"plan","summary":"Plan","steps":[{"title":"Add sun","goal":"Add sunny lighting","needs_visual_check":true}],"final":"Done"}'
             return '{"code":"executeContext.output(\\"ok\\", \\"1\\")"}'
 
     results = [
@@ -323,8 +367,8 @@ def test_visual_checkpoint_only_exposes_verified_non_empty_png(tmp_path, monkeyp
             yield "Planning."
 
         def generate_text(self, prompt, system_prompt=None):
-            if "Do not write GDScript in this planning response" in prompt:
-                return '{"summary":"Plan","steps":[{"title":"Add camera","goal":"Adjust camera","needs_visual_check":true}],"final":"Done"}'
+            if "You decide whether the request needs a visible plan" in prompt:
+                return '{"mode":"plan","summary":"Plan","steps":[{"title":"Add camera","goal":"Adjust camera","needs_visual_check":true}],"final":"Done"}'
             return '{"code":"executeContext.output(\\"ok\\", \\"1\\")"}'
 
     calls = {"count": 0}

@@ -196,7 +196,7 @@ def _execution_readiness(settings: dict[str, Any], executors: dict[str, Any]) ->
     else:
         connected = data or []
     if not connected:
-        return "No Godot executor is connected. Open the generated project in Godot with the Hastur plugin enabled."
+        return "No Godot executor is connected. Open the generated project in Godot with the Hastur plugin enabled. Hastur uses broker TCP localhost:5301; Godot DAP localhost:6006 is only the debug adapter."
     return None
 
 

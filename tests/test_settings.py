@@ -57,3 +57,21 @@ def test_public_settings_hide_legacy_placeholder_provider(tmp_path, monkeypatch)
     assert public["image_provider"] == "openai"
     assert legacy not in public["supported_llm_providers"]
     assert legacy not in public["supported_image_providers"]
+
+
+def test_hastur_ports_do_not_migrate_to_godot_adapter_ports(tmp_path, monkeypatch):
+    settings_file = tmp_path / "settings.json"
+    monkeypatch.setattr(settings_service, "SETTINGS_FILE", settings_file)
+    settings_service.save_private_settings(
+        {
+            "hastur_broker_http_port": 6005,
+            "hastur_broker_tcp_port": 6006,
+            "hastur_base_url": "http://localhost:6006",
+        }
+    )
+
+    public = settings_service.get_public_settings()
+
+    assert public["hastur_broker_http_port"] == 5302
+    assert public["hastur_broker_tcp_port"] == 5301
+    assert public["hastur_base_url"] == "http://localhost:5302"

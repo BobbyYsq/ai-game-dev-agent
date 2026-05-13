@@ -51,12 +51,56 @@ def test_normalize_gdscript_rewrites_keyword_identifier():
 
 
 def test_apply_hastur_code_treats_compile_failure_as_failure(tmp_path, monkeypatch):
+    captured = {}
+
     class FakeResponse:
         def raise_for_status(self):
             return None
 
         def json(self):
             return {"success": True, "data": {"compile_success": False, "compile_error": "Mixed use of tabs and spaces for indentation."}}
+
+    class FakeClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def post(self, *_args, **kwargs):
+            captured.update(kwargs.get("json") or {})
+            return FakeResponse()
+
+    monkeypatch.setattr(hastur_service, "get_project_dir", lambda _slug: tmp_path)
+    monkeypatch.setattr(hastur_service, "get_hastur_settings", lambda: {"enabled": True, "base_url": "http://localhost:5302", "auth_token": ""})
+    monkeypatch.setattr(hastur_service.httpx, "Client", FakeClient)
+
+    result = apply_hastur_code("shadow-garden", "if true:\n    print(\"ok\")")
+
+    assert result.success is False
+    assert "compile failed" in result.message.lower()
+    assert "\n\tprint" in result.gdscript
+    assert captured["project_path"] == tmp_path.resolve().as_posix()
+
+
+def test_apply_hastur_code_returns_executor_mismatch_guidance(tmp_path, monkeypatch):
+    class FakeResponse:
+        status_code = 404
+        reason_phrase = "Not Found"
+        text = ""
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "success": False,
+                "error": "No connected Hastur Executor matched the query",
+                "hint": "Use GET /api/executors to list available executors.",
+            }
 
     class FakeClient:
         def __init__(self, timeout):
@@ -75,11 +119,69 @@ def test_apply_hastur_code_treats_compile_failure_as_failure(tmp_path, monkeypat
     monkeypatch.setattr(hastur_service, "get_hastur_settings", lambda: {"enabled": True, "base_url": "http://localhost:5302", "auth_token": ""})
     monkeypatch.setattr(hastur_service.httpx, "Client", FakeClient)
 
-    result = apply_hastur_code("shadow-garden", "if true:\n    print(\"ok\")")
+    result = apply_hastur_code("shadow-garden", 'print("1")', executor_type="editor")
 
     assert result.success is False
-    assert "compile failed" in result.message.lower()
-    assert "\n\tprint" in result.gdscript
+    assert "No connected Hastur executor matched this project" in result.message
+    assert "localhost:5301" in result.message
+    assert "DAP" in result.message
+
+
+def test_apply_hastur_code_migrates_missing_project_hastur_settings(tmp_path, monkeypatch):
+    project_file = tmp_path / "project.godot"
+    project_file.write_text(
+        """config_version=5
+
+[application]
+config/name="shadow-garden"
+
+[editor_plugins]
+enabled=PackedStringArray("res://addons/hasturoperationgd/plugin.cfg")
+""",
+        encoding="utf-8",
+    )
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"success": True, "data": {"compile_success": True, "run_success": True, "outputs": []}}
+
+    class FakeClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def post(self, *_args, **_kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr(hastur_service, "get_project_dir", lambda _slug: tmp_path)
+    monkeypatch.setattr(
+        hastur_service,
+        "get_hastur_settings",
+        lambda: {
+            "enabled": True,
+            "base_url": "http://localhost:5302",
+            "auth_token": "",
+            "hastur_broker_host": "localhost",
+            "hastur_broker_tcp_port": 5301,
+        },
+    )
+    monkeypatch.setattr(hastur_service.httpx, "Client", FakeClient)
+
+    result = apply_hastur_code("shadow-garden", 'print("1")')
+
+    text = project_file.read_text(encoding="utf-8")
+    assert result.success is True
+    assert "[hastur_operation]" in text
+    assert 'broker_host="localhost"' in text
+    assert "broker_port=5301" in text
 
 
 def test_parse_operation_plan_validates_operations():

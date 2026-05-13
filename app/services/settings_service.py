@@ -40,6 +40,10 @@ DEFAULT_SETTINGS = {
 
 LEGACY_PLACEHOLDER_PROVIDER = "mo" + "ck"
 LEGACY_IMAGE_MODELS = {"", "mock-image", "gpt-image-2"}
+DEFAULT_HASTUR_HOST = "localhost"
+DEFAULT_HASTUR_HTTP_PORT = 5302
+DEFAULT_HASTUR_TCP_PORT = 5301
+GODOT_RESERVED_ADAPTER_PORTS = {6005, 6006}
 
 PRIVATE_SETTING_KEYS = {
     "llm_provider",
@@ -141,6 +145,19 @@ def _migrate_legacy_settings(settings: dict[str, Any]) -> None:
             image_provider,
             IMAGE_PROVIDER_DEFAULT_MODELS["openai"],
         )
+    settings["hastur_broker_host"] = str(settings.get("hastur_broker_host") or DEFAULT_HASTUR_HOST)
+    settings["hastur_broker_http_port"] = _safe_hastur_port(
+        settings.get("hastur_broker_http_port"),
+        DEFAULT_HASTUR_HTTP_PORT,
+    )
+    settings["hastur_broker_tcp_port"] = _safe_hastur_port(
+        settings.get("hastur_broker_tcp_port"),
+        DEFAULT_HASTUR_TCP_PORT,
+    )
+    base_url = str(settings.get("hastur_base_url") or "").rstrip("/")
+    if not base_url or any(f":{port}" in base_url for port in GODOT_RESERVED_ADAPTER_PORTS):
+        base_url = f"http://{settings['hastur_broker_host']}:{settings['hastur_broker_http_port']}"
+    settings["hastur_base_url"] = base_url
 
 
 def _infer_providers(update: dict[str, Any]) -> None:
@@ -171,3 +188,13 @@ def _public_provider(provider: str, fallback: str) -> str:
     if provider == LEGACY_PLACEHOLDER_PROVIDER:
         return fallback
     return provider
+
+
+def _safe_hastur_port(value: Any, default: int) -> int:
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        return default
+    if port in GODOT_RESERVED_ADAPTER_PORTS or port < 1 or port > 65535:
+        return default
+    return port

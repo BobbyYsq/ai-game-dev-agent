@@ -297,7 +297,7 @@ def _run_task(session: HasturTaskSession) -> None:
 
         plan = _normalize_plan(session.plan)
         session.plan = plan
-        if not session.plan_announced:
+        if _should_announce_plan(plan) and not session.plan_announced:
             _emit_assistant_delta(session, _plan_response_text(plan))
             session.plan_announced = True
 
@@ -378,7 +378,8 @@ def _execute_plan(
     plan: dict[str, Any],
 ) -> bool:
     steps = plan.get("steps") or []
-    if not steps:
+    direct_code = _direct_plan_code(plan)
+    if not steps and not direct_code:
         return True
 
     if session.execution_complete:
@@ -386,9 +387,13 @@ def _execute_plan(
 
     _raise_if_cancelled(session)
     feedback = session.post_execution_feedback
-    message = "Generating one complete adjustment script." if feedback else "Generating one complete Hastur script for the confirmed plan."
+    if direct_code and not feedback:
+        message = "Executing the LLM-selected direct Hastur action."
+        code = direct_code
+    else:
+        message = "Generating one complete adjustment script." if feedback else "Generating one complete Hastur script for the LLM-selected plan."
+        code = _generate_batch_code(session, project_dir, docs, skill_text, executors, plan, feedback)
     _emit_activity(session, "execution", "executing", message, {"plan": _public_plan(plan), "adjustment": feedback})
-    code = _generate_batch_code(session, project_dir, docs, skill_text, executors, plan, feedback)
     if not code:
         session.prior_results.append({"success": False, "message": "The LLM did not return executable GDScript for the batch."})
         repaired = _repair_failed_batch(session, project_dir, docs, skill_text, executors, plan, session.prior_results)
@@ -625,7 +630,10 @@ def _task_prompt(
     return f"""
 You are creating an execution plan for a local Godot project controlled through Hastur.
 Use local Godot docs and the vendored Hastur skill as constraints.
-Do not write GDScript in this planning response. Plan clear user-visible goals; the implementation will be generated later as one complete Hastur script.
+You decide whether the request needs a visible plan, a user prompt, or direct execution.
+For trivial, low-risk, single-action tasks with no missing information, set mode to "direct" and return complete GDScript in code.
+For complex, multi-step, risky, destructive, start/stop/play/autoload/rollback, or ambiguous tasks, set mode to "plan" or "ask".
+Do not include a visible plan unless you decide the user benefits from seeing or confirming it.
 Complex scene-building tasks should be described as coherent implementation phases, not tiny code-generation steps.
 For read-only inspection requests, plan the minimum steps needed to return the requested factual result; do not turn the final answer into a repeat of the task.
 Prefer conservative lighting/post-processing defaults: avoid overexposure, avoid high glow, prefer ACES/AgX/Filmic style tonemapping with controlled exposure/white values when applicable.
@@ -651,6 +659,7 @@ User request:
 
 Return JSON only:
 {{
+  "mode": "direct",
   "summary": "short user-facing plan summary",
   "read_only": false,
   "question": "",
@@ -669,11 +678,15 @@ Return JSON only:
       "needs_visual_check": false
     }}
   ],
+  "code": "complete GDScript only when mode is direct; otherwise empty",
   "final": "short completion summary"
 }}
 
+Set mode to "direct" when no visible plan or user prompt is needed. In direct mode, steps must be empty and code must be executable GDScript for one Hastur editor execution.
+Set mode to "plan" only when you decide a visible plan is useful or user approval is needed.
+Set mode to "ask" when missing information must be collected before code or planning.
 Set question only when information is required before planning safely.
-Set requires_confirmation for delete/remove/reset/start/stop/play/autoload/rollback operations.
+Set requires_user_approval or step requires_confirmation for delete/remove/reset/start/stop/play/autoload/rollback operations.
 Keep choices empty unless the user needs to decide between materially different approaches.
 If user_prompt is not null, it must be an object with title, body, optional input_label, and optional choices. User-facing choices must come from you, not from fixed defaults.
 Set read_only true for inspect/list/read tasks that should not mutate the project.
@@ -805,10 +818,17 @@ def _godot_coordinate_summary() -> str:
 
 
 def _normalize_plan(plan: dict[str, Any]) -> dict[str, Any]:
+    mode = str(plan.get("mode") or "").strip().lower()
     steps = plan.get("steps")
     if not isinstance(steps, list):
         legacy_code = str(plan.get("code") or "").strip()
-        steps = [{"title": plan.get("message") or "Respond", "goal": plan.get("message") or "", "type": "editor", "legacy_code": legacy_code}]
+        if legacy_code:
+            steps = []
+            mode = mode or "direct"
+        else:
+            steps = [{"title": plan.get("message") or "Respond", "goal": plan.get("message") or "", "type": "editor", "legacy_code": legacy_code}]
+    if mode not in {"direct", "plan", "ask"}:
+        mode = "direct" if str(plan.get("code") or "").strip() and not steps else "plan"
     normalized_steps = []
     for index, step in enumerate(steps):
         if not isinstance(step, dict):
@@ -826,6 +846,7 @@ def _normalize_plan(plan: dict[str, Any]) -> dict[str, Any]:
     choices = plan.get("choices") if isinstance(plan.get("choices"), list) else []
     user_prompt = plan.get("user_prompt") if isinstance(plan.get("user_prompt"), dict) else None
     return {
+        "mode": mode,
         "summary": str(plan.get("summary") or plan.get("message") or "Plan ready."),
         "question": str(plan.get("question") or ""),
         "read_only": bool(plan.get("read_only", False)),
@@ -833,6 +854,7 @@ def _normalize_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "user_prompt": _normalize_user_prompt(user_prompt) if user_prompt else None,
         "choices": [_normalize_choice(choice, index) for index, choice in enumerate(choices)],
         "steps": normalized_steps,
+        "code": str(plan.get("code") or "").strip(),
         "final": str(plan.get("final") or "Task completed. Review local Git changes manually from the Git workbench."),
     }
 
@@ -866,6 +888,7 @@ def _normalize_choice(choice: Any, index: int) -> dict[str, str]:
 
 def _public_plan(plan: dict[str, Any]) -> dict[str, Any]:
     return {
+        "mode": plan.get("mode", "plan"),
         "summary": plan.get("summary", ""),
         "read_only": bool(plan.get("read_only", False)),
         "steps": [_public_step(step, index) for index, step in enumerate(plan.get("steps") or [])],
@@ -890,7 +913,6 @@ def _plan_requires_review(session: HasturTaskSession, plan: dict[str, Any]) -> b
     steps = plan.get("steps") or []
     return bool(
         plan.get("requires_user_approval")
-        or steps
         or any(step.get("requires_confirmation") for step in steps)
     )
 
@@ -979,7 +1001,7 @@ def _is_read_only_plan(session: HasturTaskSession, plan: dict[str, Any]) -> bool
 
 
 def _should_prompt_after_execution(plan: dict[str, Any], session: HasturTaskSession) -> bool:
-    return bool(session.execution_complete and not session.final_ready and not _is_read_only_plan(session, plan))
+    return bool(session.execution_complete and not session.final_ready and _plan_needs_visual_check(plan))
 
 
 def _instruction_has_skill_prefix(instruction: str) -> bool:
@@ -1033,6 +1055,16 @@ def _plan_response_text(plan: dict[str, Any]) -> str:
         lines.append("")
         lines.append("After you confirm, I will generate one complete Hastur batch script for the whole plan and repair that full script until it runs.")
     return "\n".join(line for line in lines if line is not None).strip() + "\n"
+
+
+def _should_announce_plan(plan: dict[str, Any]) -> bool:
+    return str(plan.get("mode") or "plan") != "direct"
+
+
+def _direct_plan_code(plan: dict[str, Any]) -> str:
+    if str(plan.get("mode") or "").lower() != "direct":
+        return ""
+    return str(plan.get("code") or "").strip()
 
 
 def _empty_visual_checkpoint() -> dict[str, Any]:
@@ -1217,6 +1249,7 @@ def _is_unrecoverable_hastur_failure(result: dict[str, Any]) -> bool:
             "broker unavailable",
             "broker is not reachable",
             "no godot executor",
+            "no connected hastur executor",
             "executor is connected",
             "connection refused",
             "connecterror",

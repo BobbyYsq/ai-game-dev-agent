@@ -55,8 +55,10 @@ Implemented:
 - Vendored Hastur skill discovery from `hastur-operation-plugin-main/.claude/skills/`.
 - Chat-style LLM + Hastur endpoint with optional uploaded file/image context and private token/base URL binding.
 - Codex-like Hastur task sessions with streamed public work thoughts, hidden plans, unified user prompts, one complete batch execution per confirmed plan or adjustment, whole-batch repair, verified visual checkpoints, and verification events.
-- LLM + Hastur task sessions stream public work notes through `thought_delta` and user-facing plan/result text through `assistant_delta` into the same assistant message without an activity-summary panel; final responses prefer real Hastur execution outputs such as scene-tree text.
+- LLM + Hastur task sessions stream public work notes through `thought_delta` and user-facing result/LLM-selected plan text through `assistant_delta` into the same assistant message without an activity-summary panel; final responses prefer real Hastur execution outputs such as scene-tree text.
+- LLM + Hastur task intake lets the LLM choose `direct`, `plan`, or `ask`; simple low-risk commands can execute directly without a fixed plan/confirmation prompt, and the generic modal is shown only when the LLM requests user input, choices, approval, or visual review.
 - Hastur GDScript execution normalizes indentation, strips code fences, rewrites unsafe generated identifiers such as `class_name`, treats broker compile/run failures as failed executions, and keeps sending the full Hastur error context and failed batch summary back to the LLM for repair until the complete script succeeds, the user cancels, or broker/executor/provider state becomes unrecoverable.
+- Hastur execution normalizes generated-project paths before broker requests, resolves matching executor IDs from `/api/executors` when possible, migrates missing generated-project `[hastur_operation]` settings, and reports Godot DAP `6006` as separate from Hastur TCP `5301` when executor matching fails.
 - Hastur repair handling accepts executable code from top-level `code`, nested `steps[].code`, fenced snippets, or bare GDScript responses.
 - Generated-project Git status with friendly file change metadata, branch creation that preserves local changes, branch switch/delete, project-level save commits, merge-to-main, visual history graph, Godot cache ignore/migration, revert commit, restore file from commit, and safe restore-to-commit rollback.
 - Blank Hastur-enabled Godot project creation with a minimal `Main.tscn`, Godot `.gitignore`/`.gitattributes`, and automatic Git initialization.
@@ -65,7 +67,7 @@ Implemented:
 
 Current Codex task:
 
-- The local Git workbench has been simplified to project-level actions with collapsible changed-file groups, Godot cache files are ignored/migrated automatically, LLM + Hastur uses public thought streaming plus assistant body streaming with no activity-summary panel, the unified LLM-driven prompt modal is the only task confirmation UI, and confirmed plans execute as whole Hastur batches with whole-batch repair.
+- The local Git workbench has been simplified to project-level actions with collapsible changed-file groups, Godot cache files are ignored/migrated automatically, LLM + Hastur uses public thought streaming plus assistant body streaming with no activity-summary panel, the LLM decides direct execution versus visible plans/prompts, the unified LLM-driven prompt modal is the only task confirmation UI, and LLM-selected plans execute as whole Hastur batches with whole-batch repair.
 - Keep the UI free of advanced provider/model controls; provider detection should remain automatic from keys/saved settings.
 - Preserve the safety rule that the UI never exposes arbitrary GDScript input.
 - Keep broker defaults local-only: host `localhost`, TCP `5301`, HTTP `5302`.
