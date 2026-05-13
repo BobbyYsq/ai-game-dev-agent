@@ -12,6 +12,7 @@ from app.tools.godot_templates.base import (
     create_minimal_project_godot,
     ensure_default_folders,
     install_hastur_addon,
+    write_godot_project_notes,
 )
 
 
@@ -47,7 +48,7 @@ def create_godot_project(
     files = _generate_blank_hastur_project(project_dir, project_name, host, port)
     ensure_godot_vcs_metadata(project_dir)
     files.extend([project_dir / ".gitignore", project_dir / ".gitattributes"])
-    _write_godot_notes(project_dir, engine, host, port)
+    write_godot_project_notes(project_dir, engine, host, port)
     files.append(project_dir / "docs" / "GODOT_PROJECT.md")
     git_result = None
     if enable_git:
@@ -68,21 +69,6 @@ def create_godot_project(
         message=message,
         git=git_result,
     )
-
-
-def _write_godot_notes(project_dir: Path, engine: str, broker_host: str, broker_port: int) -> None:
-    notes = f"""# Godot Project
-
-- Engine target: {engine}
-- Main scene: `res://scenes/Main.tscn`
-- Hastur addon: `res://addons/hasturoperationgd/plugin.cfg`
-- Hastur broker TCP target: `{broker_host}:{broker_port}`
-
-The Hastur editor plugin is enabled in `project.godot`. Start the broker from the AI Game Development Agent dashboard before opening or reloading the project in Godot.
-"""
-    notes_path = project_dir / "docs" / "GODOT_PROJECT.md"
-    notes_path.parent.mkdir(parents=True, exist_ok=True)
-    notes_path.write_text(notes, encoding="utf-8")
 
 
 def _generate_blank_hastur_project(project_dir: Path, project_name: str, broker_host: str, broker_port: int) -> list[Path]:

@@ -39,17 +39,25 @@ There is no provider/model picker in the UI. Provider selection is automatic.
 - **Logs**: shows recent broker logs.
 - **Executors**: queries connected Godot executors.
 
+### Skills
+
+- **Scope**: uploads skills globally to `workspace/skills/` by default, or into the selected project's `.claude/skills/` folder for project-specific behavior.
+- **Skill files**: accepts a skill zip or `SKILL.md` plus supporting files. Vendored Hastur skills are listed as read-only and cannot be deleted from the UI.
+- **Upload Skill**: validates the package, requires exactly one `SKILL.md`, and exposes only lightweight metadata to the LLM until the model requests the full body.
+- **Skill list**: shows vendored, global, and selected-project skills, their scope, read-only state, description, trigger guidance, and path label.
+
 ## LLM + Hastur
 
 - **Project selector**: selects the target generated Godot project.
 - **Readiness pill**: reports broker/executor readiness where known.
-- **Message history**: displays public `thought_delta` work notes above streamed `assistant_delta` body text in the same assistant bubble. There is no activity-summary panel.
+- **Message history**: displays LLM-authored public `thought_delta` work notes, structured task progress, and streamed `assistant_delta` body text in the same assistant bubble. There is no activity-summary panel.
 - **Composer**: the only instruction input. Type `/` to open the vendored skill picker.
-- **Attachment button (`+`)**: uploads files and images for the request. Images are passed to providers that support image input; text files are summarized into the prompt.
-- **Send**: creates a Hastur task session, streams public thinking and assistant text back into the chat, then executes the confirmed plan as one complete Hastur batch.
+- **Attachment button (`+`)**: uploads files and images for the request. Images are summarized once by providers that support image input and reused as compact visual context; text files are summarized into the prompt.
+- **Plan**: creates a planning-only task. The LLM must design the plan, instantiate the abstract modal with its own confirmation/revision copy, and wait for approval before any GDScript generation or Hastur execution.
+- **Send**: creates an automatic Hastur task session. The LLM decides whether to execute directly, show a plan, or instantiate a modal for missing user intent.
 - **Stop**: cancels the active task. This is the user escape hatch for long repair loops.
-- **Task modal**: the only modal is the generic prompt UI. It handles plan confirmation, option choices, visual review, and modification feedback using `title`, `body`, `choices`, `input_label`, `image_url`, `image_status`, and `requires_input`.
-- **Visual checkpoint**: shows a saved Godot viewport screenshot only when `image_status` is `available`; missing or failed screenshots appear as readable text instead of a broken image.
+- **Task modal**: the only modal is the abstract prompt UI. It renders only LLM-provided `title`, `body`, `choices`, `input_label`, and `requires_input`; the agent does not generate user-visible modal copy.
+- **Task progress**: after planning, the assistant bubble shows the LLM's task breakdown. Simple tasks show one item; phased tasks show multiple items with the active task highlighted.
 - **Local Git panel**: is read-only in chat. It shows branch/dirty count and opens the manual Git workbench; branch/save/merge controls live in the workbench.
 
 The UI does not expose arbitrary GDScript entry. Hastur code is produced by the LLM under vendored skill instructions and sent through backend validation/safety checks.

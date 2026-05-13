@@ -87,12 +87,46 @@
           <div id="broker_output" class="mini-output"></div>
         </section>
 
+        <section class="panel skills-panel" aria-labelledby="skills-title">
+          <div class="panel-heading">
+            <h2 id="skills-title" data-i18n="skills_title">Skills</h2>
+            <button type="button" class="secondary compact" onclick="loadSkills()" data-i18n="refresh">Refresh</button>
+          </div>
+          <p class="panel-note" data-i18n="skills_note">Manage global and project skills. Vendored Hastur skills are read-only.</p>
+          <div class="form-grid">
+            <label>
+              <span data-i18n="skill_scope">Scope</span>
+              <select id="skill_scope">
+                <option value="global" data-i18n="skill_scope_global">Global</option>
+                <option value="project" data-i18n="skill_scope_project">Project</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="skill_project">Project</span>
+              <select id="skill_project_slug"></select>
+            </label>
+          </div>
+          <label>
+            <span data-i18n="skill_uploads">Skill files</span>
+            <div class="file-picker-row">
+              <button type="button" class="secondary" onclick="triggerSkillFiles()" data-i18n="skill_file_button">Choose files</button>
+              <span id="skill_files_label" class="muted-row" data-i18n="skill_no_files">No files selected</span>
+            </div>
+            <input id="skill_files" type="file" class="visually-hidden" multiple>
+          </label>
+          <div class="button-row">
+            <button type="button" onclick="uploadSkill()" data-i18n="upload_skill">Upload Skill</button>
+          </div>
+          <p id="skillsMessage" class="message" role="status"></p>
+          <div id="skills_output" class="skill-admin-list"></div>
+        </section>
+
         <section class="panel project-workbench" aria-labelledby="workbench-title">
           <div class="panel-heading">
             <h2 id="workbench-title" data-i18n="project_workbench">Project Workbench</h2>
             <button type="button" class="secondary compact" onclick="loadProjects()" data-i18n="refresh">Refresh</button>
           </div>
-          <p class="panel-note" data-i18n="workbench_note">Select a generated project, inspect its files, and use the manual Git workbench for selected-file actions.</p>
+          <p class="panel-note" data-i18n="workbench_note">Select a generated project and use the simple local Git workbench.</p>
           <div class="workbench-layout">
             <aside>
               <ul id="recent_projects" class="project-list"></ul>
@@ -122,27 +156,52 @@
             </div>
           </div>
           <div class="agent-workspace">
-            <div>
+            <div class="chat-main">
               <div id="chat_messages" class="chat-messages" aria-live="polite"></div>
               <div id="skill_picker" class="skill-picker hidden"></div>
               <div id="chat_attachment_list" class="attachment-list"></div>
               <div class="composer">
                 <button type="button" class="icon-button" onclick="triggerChatFiles()" title="Attach files" aria-label="Attach files">+</button>
                 <textarea id="chat_instruction" rows="2" data-i18n-placeholder="chat_placeholder" placeholder="/godot-remote-executor Add a Label node to Main.tscn and save the scene."></textarea>
+                <button type="button" id="chat_plan_button" class="secondary" onclick="sendHasturChat('plan')" data-i18n="plan_with_llm">Plan</button>
                 <button type="button" id="chat_send_button" onclick="sendHasturChat()" data-i18n="send_to_llm">Send</button>
                 <button type="button" id="chat_stop_button" class="secondary hidden" onclick="cancelActiveTask()" data-i18n="stop_task">Stop</button>
                 <input id="chat_files" type="file" class="visually-hidden" multiple>
               </div>
               <p id="chatMessage" class="message" role="status"></p>
             </div>
-            <aside class="chat-git-panel">
-              <div class="panel-heading compact-heading">
-                <h3 data-i18n="local_git">Local Git</h3>
-                <button type="button" class="secondary compact" onclick="refreshChatGit()" data-i18n="refresh">Refresh</button>
-              </div>
-              <p class="panel-note" data-i18n="chat_git_note">Git actions are manual. Open the workbench to review, commit, or restore selected files.</p>
-              <button type="button" class="secondary compact" onclick="openGitWorkbench()" data-i18n="open_git_workbench">Open Git Workbench</button>
-              <div id="chat_git_output" class="mini-output"></div>
+            <aside class="agent-sidebar" aria-label="Agent task status">
+              <section class="task-panel" aria-labelledby="task-panel-title">
+                <div class="panel-heading compact-heading">
+                  <h3 id="task-panel-title" data-i18n="current_task_panel">Current Task</h3>
+                  <span id="task_state_pill" class="status-pill" data-i18n="idle">Idle</span>
+                </div>
+                <div id="task_overview" class="task-overview">
+                  <p class="muted-row" data-i18n="task_idle_note">Send a message to start a task. Progress will appear here instead of inside the chat.</p>
+                </div>
+                <div id="task_list" class="task-list"></div>
+                <div id="task_error" class="task-error hidden"></div>
+              </section>
+
+              <section class="work-log-panel" aria-labelledby="work-log-title">
+                <div class="panel-heading compact-heading">
+                  <h3 id="work-log-title" data-i18n="work_log">Work Log</h3>
+                  <button type="button" class="secondary compact" onclick="clearWorkLog()" data-i18n="clear_log">Clear</button>
+                </div>
+                <div id="task_work_log" class="work-log">
+                  <p class="muted-row" data-i18n="work_log_empty">Public work notes will stream here.</p>
+                </div>
+              </section>
+
+              <section class="chat-git-panel" aria-labelledby="chat-git-title">
+                <div class="panel-heading compact-heading">
+                  <h3 id="chat-git-title" data-i18n="local_git">Local Git</h3>
+                  <button type="button" class="secondary compact" onclick="refreshChatGit()" data-i18n="refresh">Refresh</button>
+                </div>
+                <p class="panel-note" data-i18n="chat_git_note">Git actions are manual. Open the workbench to save, merge, restore, or manage branches.</p>
+                <button type="button" class="secondary compact" onclick="openGitWorkbench()" data-i18n="open_git_workbench">Open Git Workbench</button>
+                <div id="chat_git_output" class="mini-output"></div>
+              </section>
             </aside>
           </div>
         </section>

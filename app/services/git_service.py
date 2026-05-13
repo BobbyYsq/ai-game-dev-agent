@@ -454,6 +454,19 @@ def rollback(project_dir: Path, commit_hash: str, confirm: bool = False) -> dict
         return {"success": False, "message": "Save or discard local changes before restoring to a previous save point.", "status": status(project_dir)}
     target = run_git(project_dir, ["rev-parse", "--verify", commit_hash])
     short = run_git(project_dir, ["rev-parse", "--short", target])
+    if not confirm:
+        subject = run_git(project_dir, ["log", "-1", "--pretty=%s", target])
+        return {
+            "success": True,
+            "preview": True,
+            "committed": False,
+            "message": f"Ready to restore to {short}. Confirm to create a safe restore commit.",
+            "target": target,
+            "short_hash": short,
+            "subject": subject,
+            "status": status(project_dir),
+            "graph": graph(project_dir),
+        }
     _ensure_identity(project_dir)
     _run_git_raw(project_dir, ["restore", f"--source={target}", "--staged", "--worktree", "--", "."])
     _run_git_raw(project_dir, ["add", "-A"])

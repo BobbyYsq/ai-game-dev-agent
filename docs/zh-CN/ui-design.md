@@ -43,11 +43,10 @@ UI 不显示 provider、model 或 base URL 控件，这些由后端根据保存�
 - **附件按钮 (`+`)**：上传图片和文件，作为模型输入或上下文。
 - **发送**：创建 Hastur task session，流式显示思考与正文；确认计划后一次生成完整 Hastur batch 执行。
 - **停止**：取消当前任务，防止长时间 repair 循环无法退出。
-- **任务弹窗**：唯一弹窗是通用 prompt modal，通过 `title`、`body`、`choices`、`input_label`、`image_url`、`image_status`、`requires_input` 处理计划确认、方案选择、视觉检查和修改意见。详细计划只在聊天正文中显示。
-- **视觉 checkpoint**：只有 `image_status` 为 `available` 时才显示 Godot 视口截图；截图缺失或加载失败时显示可读错误，不显示破图。
+- **任务弹窗**：唯一弹窗是通用 prompt modal，通过 `title`、`body`、`choices`、`input_label`、`requires_input` 处理计划确认、方案选择和修改意见。详细计划只在聊天正文中显示。
 - **本地 Git 面板**：聊天页只读显示分支和改动数量，并提供打开 Git 工作台入口。
 
-UI 不提供任意 GDScript 输入框。执行代码由后端在读取 Godot docs 与 vendored skill 后生成，并通过 Hastur 安全通道发送。
+UI 不提供任意 GDScript 输入框。执行代码由后端在读取 Godot docs 与轻量 skill 信息后生成，并通过 Hastur 安全通道发送；完整 skill 正文只在显式选择或 LLM 请求上下文时加载。
 
 ## 图像管线
 

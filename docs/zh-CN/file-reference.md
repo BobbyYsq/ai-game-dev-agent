@@ -9,7 +9,7 @@
 - `app/services/settings_service.py`：私有设置、公开设置、provider 默认值推断。
 - `app/services/godot_project_service.py`：生成 Godot 项目、安装 Hastur、初始化 Git。
 - `app/services/asset_service.py`：图像资产、manifest、GDD 和 Blender 参考。
-- `app/services/hastur_task_service.py`：Codex-like Hastur 任务会话、公开 `thought_delta` 思考流、`assistant_delta` 正文流、统一通用提示、完整 batch 生成与持续 repair、取消任务、已校验视觉截图和最终输出提取。
+- `app/services/hastur_task_service.py`：Codex-like Hastur 任务会话、公开 `thought_delta` 思考流、`assistant_delta` 正文流、统一通用提示、完整 batch 生成与持续 repair、取消任务、视觉/执行文本证据和最终输出提取。
 - `app/services/hastur_chat_service.py`：兼容的一次性 LLM + Hastur 调用。
 - `app/services/git_service.py`：Godot VCS metadata、友好改动状态、分支/保存/合并/回档；hard rollback 已禁用。
 - `app/tools/godot_templates/`：Godot 项目模板生成器。

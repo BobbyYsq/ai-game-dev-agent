@@ -32,7 +32,14 @@ def test_hastur_chat_loads_skill_and_keeps_token_hidden(tmp_path, monkeypatch):
     skills_dir = tmp_path / "skills"
     skill_dir = skills_dir / "godot-remote-executor"
     skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text("# Godot Remote Executor", encoding="utf-8")
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: godot-remote-executor\n"
+        "description: Remote Godot editor executor.\n"
+        "---\n\n"
+        "UNIQUE_FULL_SKILL_BODY_SHOULD_NOT_BE_IN_PROMPT",
+        encoding="utf-8",
+    )
 
     class FakeLLM:
         supports_images = True
@@ -40,6 +47,8 @@ def test_hastur_chat_loads_skill_and_keeps_token_hidden(tmp_path, monkeypatch):
         def generate_text(self, prompt, system_prompt=None):
             assert "secret-token" not in prompt
             assert "Auth token is available to the app: True" in prompt
+            assert "Available skills:" in prompt
+            assert "UNIQUE_FULL_SKILL_BODY_SHOULD_NOT_BE_IN_PROMPT" not in prompt
             return '{"message": "ready", "requires_confirmation": false, "code": ""}'
 
     monkeypatch.setattr("app.services.asset_service.GENERATED_PROJECTS_DIR", project_root)

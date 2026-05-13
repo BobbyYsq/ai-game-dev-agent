@@ -27,6 +27,25 @@ def test_git_rollback_creates_safe_restore_commit(tmp_path: Path):
     assert git_service.run_git(tmp_path, ["log", "-1", "--pretty=%s"]).startswith("Restore to")
 
 
+def test_git_rollback_without_confirmation_returns_preview(tmp_path: Path):
+    git_service.init_repo(tmp_path)
+    (tmp_path / "file.txt").write_text("one", encoding="utf-8")
+    git_service.commit_all(tmp_path, "one")
+    first = git_service.run_git(tmp_path, ["rev-parse", "HEAD"])
+    (tmp_path / "file.txt").write_text("two", encoding="utf-8")
+    git_service.commit_all(tmp_path, "two")
+
+    result = git_service.rollback(tmp_path, first, confirm=False)
+
+    assert result["success"] is True
+    assert result["preview"] is True
+    assert result["committed"] is False
+    assert result["short_hash"] == first[:7]
+    assert result["subject"] == "one"
+    assert (tmp_path / "file.txt").read_text(encoding="utf-8") == "two"
+    assert git_service.run_git(tmp_path, ["log", "-1", "--pretty=%s"]) == "two"
+
+
 def test_init_repo_uses_main_branch(tmp_path: Path):
     git_service.init_repo(tmp_path)
 

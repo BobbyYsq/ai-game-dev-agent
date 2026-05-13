@@ -36,7 +36,7 @@ const translations = {
     godot_project_created: "Project created.",
     project_workbench: "Project Workbench",
     refresh: "Refresh",
-    workbench_note: "Select a generated project, inspect its files, and use the manual Git workbench for selected-file actions.",
+    workbench_note: "Select a generated project and use the simple local Git workbench.",
     select_project_hint: "Select a project to inspect it.",
     no_projects: "No generated projects yet.",
     open_details: "Details",
@@ -66,6 +66,8 @@ const translations = {
     rollback_to_save: "Restore here",
     git_history_graph: "History graph",
     no_commits: "No saves yet.",
+    restore_confirm_prompt: "Review this restore target, then confirm to create a safe restore commit:",
+    confirm_restore: "Confirm restore",
     broker_managed: "Dashboard broker",
     broker_external: "External broker",
     broker_stopped: "Broker stopped",
@@ -76,6 +78,22 @@ const translations = {
     broker_executors: "Executors",
     hastur_config_title: "Hastur Broker",
     hastur_config_note: "Start the local broker, keep the token private, and check whether Godot executors are connected.",
+    skills_title: "Skills",
+    skills_note: "Manage global and project skills. Vendored Hastur skills are read-only.",
+    skill_scope: "Scope",
+    skill_scope_global: "Global",
+    skill_scope_project: "Project",
+    skill_project: "Project",
+    skill_uploads: "Skill files",
+    skill_file_button: "Choose files",
+    skill_no_files: "No files selected",
+    skill_files_selected: "files selected",
+    upload_skill: "Upload Skill",
+    skill_uploaded: "Skill uploaded.",
+    skills_loaded: "Skills loaded.",
+    delete_skill: "Delete",
+    readonly_skill: "read-only",
+    user_skill: "user skill",
     start_broker: "Start Broker",
     stop_broker: "Stop Broker",
     broker_status: "Status",
@@ -86,17 +104,16 @@ const translations = {
     hastur_project: "Project",
     chat_placeholder: "/godot-remote-executor Add a Label node to Main.tscn and save the scene.",
     send_to_llm: "Send",
+    plan_with_llm: "Plan",
     chat_required: "Select a project and enter a message.",
     sending_chat: "Starting task...",
     chat_done: "Task completed.",
-    chat_git_note: "Git actions are manual. Open the workbench to review, commit, or restore selected files.",
+    chat_git_note: "Git actions are manual. Open the workbench to save, merge, restore, or manage branches.",
     open_git_workbench: "Open Git Workbench",
     changed_files: "Changed files",
-    selected_files: "Selected files",
-    commit_selected: "Commit selected",
-    discard_selected: "Discard selected",
-    restore_file: "Restore file",
     revert_commit: "Revert commit",
+    restore_confirm_prompt: "Review this restore target, then confirm to create a safe restore commit:",
+    confirm_restore: "Confirm restore",
     no_changes: "No local changes.",
     task_review: "Task review",
     confirm_plan: "Confirm plan",
@@ -107,6 +124,7 @@ const translations = {
     confirmation_needed: "Confirmation required before execution.",
     confirm_execute: "Confirm and execute",
     answer_and_continue: "Answer and continue",
+    custom_reply: "Other instructions",
     technical_details: "Technical details",
     assets_title: "Image Pipeline",
     assets_badge: "review workflow",
@@ -176,7 +194,7 @@ const translations = {
     godot_project_created: "项目已创建。",
     project_workbench: "项目工作台",
     refresh: "刷新",
-    workbench_note: "选择已生成项目，查看文件，并在手动 Git 工作台中执行选中文件操作。",
+    workbench_note: "选择已生成项目，并使用简化的本地 Git 工作台。",
     select_project_hint: "请选择一个项目。",
     no_projects: "还没有生成项目。",
     open_details: "详情",
@@ -211,14 +229,12 @@ const translations = {
     chat_required: "请选择项目并输入消息。",
     sending_chat: "正在启动任务...",
     chat_done: "任务完成。",
-    chat_git_note: "Git 操作需要手动执行。打开工作台来审查、提交或恢复选中文件。",
+    chat_git_note: "Git 操作需要手动执行。打开工作台来保存、合并、回档或管理分支。",
     open_git_workbench: "打开 Git 工作台",
     changed_files: "改动文件",
-    selected_files: "选中文件",
-    commit_selected: "提交选中",
-    discard_selected: "丢弃选中",
-    restore_file: "恢复文件",
     revert_commit: "反向提交",
+    restore_confirm_prompt: "请先确认这个回档目标；确认后会创建一个安全恢复提交：",
+    confirm_restore: "确认回档",
     no_changes: "没有本地改动。",
     task_review: "任务确认",
     confirm_plan: "确认计划",
@@ -356,11 +372,28 @@ const uiTranslations = {
     broker_status: "Status",
     broker_logs: "Logs",
     load_executors: "Executors",
+    skills_title: "Skills",
+    skills_note: "Manage global and project skills. Vendored Hastur skills are read-only.",
+    skill_scope: "Scope",
+    skill_scope_global: "Global",
+    skill_scope_project: "Project",
+    skill_project: "Project",
+    skill_uploads: "Skill files",
+    skill_file_button: "Choose files",
+    skill_no_files: "No files selected",
+    skill_files_selected: "files selected",
+    upload_skill: "Upload Skill",
+    skill_uploaded: "Skill uploaded.",
+    skills_loaded: "Skills loaded.",
+    delete_skill: "Delete",
+    readonly_skill: "read-only",
+    user_skill: "user skill",
     chat_title: "LLM + Hastur Chat",
     chat_note: "Use one input. The agent streams public work notes, asks only when needed, and executes through Hastur.",
     hastur_project: "Project",
     chat_placeholder: "/godot-remote-executor Add a Label node to Main.tscn and save the scene.",
     send_to_llm: "Send",
+    plan_with_llm: "Plan",
     chat_required: "Select a project and enter a message.",
     sending_chat: "Starting task...",
     chat_done: "Task completed.",
@@ -372,9 +405,19 @@ const uiTranslations = {
     broker_stopped_state: "broker stopped",
     confirmation_needed: "Confirmation required",
     answer_and_continue: "Answer and continue",
+    custom_reply: "Other instructions",
     thinking_placeholder: "Thinking...",
-    image_unavailable: "Screenshot is not available.",
-    image_load_failed: "Screenshot could not be loaded.",
+    current_task_panel: "Current Task",
+    idle: "Idle",
+    task_idle_note: "Send a message to start a task. Progress will appear here instead of inside the chat.",
+    task_started: "Task started.",
+    task_phase: "Phase",
+    task_strategy: "Strategy",
+    task_complexity: "Complexity",
+    task_failed_brief: "The task failed. Check the task panel for the last error and repair status.",
+    work_log: "Work Log",
+    clear_log: "Clear",
+    work_log_empty: "Public work notes will stream here.",
     close: "Close",
     attach_files: "Attach files",
     assets_title: "Image Pipeline",
@@ -469,6 +512,8 @@ const uiTranslations = {
     rollback_to_save: "安全回档到这里",
     git_history_graph: "历史图",
     no_commits: "还没有保存点。",
+    restore_confirm_prompt: "请先确认这个回档目标；确认后会创建一个安全恢复提交：",
+    confirm_restore: "确认回档",
     changed_files: "改动文件",
     no_changes: "没有本地改动。",
     not_git_repository: "这不是 Git 仓库。",
@@ -503,11 +548,28 @@ const uiTranslations = {
     broker_status: "状态",
     broker_logs: "日志",
     load_executors: "Executors",
+    skills_title: "Skills",
+    skills_note: "管理全局和项目 skills。内置 Hastur skills 为只读。",
+    skill_scope: "范围",
+    skill_scope_global: "全局",
+    skill_scope_project: "项目",
+    skill_project: "项目",
+    skill_uploads: "Skill 文件",
+    skill_file_button: "选择文件",
+    skill_no_files: "未选择文件",
+    skill_files_selected: "个文件已选择",
+    upload_skill: "上传 Skill",
+    skill_uploaded: "Skill 已上传。",
+    skills_loaded: "Skills 已加载。",
+    delete_skill: "删除",
+    readonly_skill: "只读",
+    user_skill: "用户 skill",
     chat_title: "LLM + Hastur 聊天",
     chat_note: "只使用一个输入框。Agent 会流式显示公开工作记录，只在需要时询问，并通过 Hastur 执行。",
     hastur_project: "项目",
     chat_placeholder: "/godot-remote-executor 给 Main.tscn 添加一个 Label 节点并保存场景。",
     send_to_llm: "发送",
+    plan_with_llm: "计划",
     chat_required: "请选择项目并输入消息。",
     sending_chat: "正在启动任务...",
     chat_done: "任务完成。",
@@ -520,8 +582,6 @@ const uiTranslations = {
     confirmation_needed: "需要确认",
     answer_and_continue: "回答并继续",
     thinking_placeholder: "思考中...",
-    image_unavailable: "截图不可用。",
-    image_load_failed: "截图无法加载。",
     close: "关闭",
     attach_files: "添加文件",
     assets_title: "图像管线",
@@ -567,11 +627,15 @@ const state = {
   selectedProject: localStorage.getItem("selectedProject") || "",
   assets: [],
   skills: [],
+  skillProject: localStorage.getItem("skillProject") || "",
   selectedSkill: "godot-remote-executor",
   chatAttachments: [],
   activeTask: null,
   activeEventSource: null,
   activeAssistantMessage: null,
+  taskProgress: null,
+  taskError: "",
+  workLog: [],
   taskWaiting: false,
   projectDetailMode: "details",
   lastBrokerStatus: null,
@@ -604,6 +668,10 @@ function setLanguage(language) {
   renderAssetGallery();
   renderChatAttachments();
   renderAssetFileLabel();
+  renderSkillFileLabel();
+  renderSkillsPanel();
+  renderTaskPanel(state.taskProgress || {});
+  renderWorkLog();
   if ($("hasturTokenStatus") && state.lastHasHasturToken !== null) $("hasturTokenStatus").textContent = state.lastHasHasturToken ? t("token_ready") : t("token_missing");
   updateChatReadiness(state.lastReadinessStatus, state.lastExecutorStatus);
   if (state.lastBrokerStatus) renderBrokerStatus(state.lastBrokerStatus, state.lastBrokerMessage);
@@ -763,7 +831,7 @@ async function loadProjects() {
 }
 
 function renderProjectSelectors() {
-  [$("asset_project_slug"), $("hastur_project_slug")].forEach((select) => {
+  [$("asset_project_slug"), $("hastur_project_slug"), $("skill_project_slug")].filter(Boolean).forEach((select) => {
     const selected = select.value || state.selectedProject;
     select.innerHTML = state.projects.map((project) => `<option value="${escapeAttr(project.slug)}">${escapeHTML(project.slug)}</option>`).join("");
     if (!state.projects.length) {
@@ -773,6 +841,8 @@ function renderProjectSelectors() {
     }
   });
   if (state.projects.length) loadAssetsForSelectedProject();
+  if ($("skill_project_slug") && state.skillProject) $("skill_project_slug").value = state.skillProject;
+  loadSkills();
 }
 
 function renderProjects() {
@@ -845,23 +915,6 @@ async function saveGitSnapshot(slug, targetId = "project_detail_pane") {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message }),
-    });
-    setGitActionOutput(targetId, data);
-    await refreshGitWorkbench(slug, targetId);
-    setGitActionOutput(targetId, data);
-  } catch (error) {
-    setGitActionOutput(targetId, { success: false, message: error.message });
-  }
-}
-
-async function discardSelectedChanges(slug, targetId = "project_detail_pane") {
-  const paths = selectedGitPaths(targetId);
-  if (!paths.length) return;
-  try {
-    const data = await requestJSON(`/api/projects/${encodeURIComponent(slug)}/git/discard`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paths }),
     });
     setGitActionOutput(targetId, data);
     await refreshGitWorkbench(slug, targetId);
@@ -945,6 +998,18 @@ async function rollbackToCommit(slug, commitHash, targetId = "project_detail_pan
   }
 }
 
+function showRestoreConfirmation(slug, commitHash, shortHash, subject, targetId = "project_detail_pane") {
+  const node = $(`${targetId}_git_action_output`);
+  if (!node || !commitHash) return;
+  const label = [shortHash, subject].filter(Boolean).join(" ");
+  node.innerHTML = `
+    <div class="restore-confirm">
+      <p>${escapeHTML(t("restore_confirm_prompt"))}</p>
+      <p><code>${escapeHTML(label || commitHash)}</code></p>
+      <button type="button" onclick="rollbackToCommit('${escapeAttr(slug)}', '${escapeAttr(commitHash)}', '${escapeAttr(targetId)}')">${escapeHTML(t("confirm_restore"))}</button>
+    </div>`;
+}
+
 async function revertCommit(slug, commitHash, targetId = "project_detail_pane") {
   try {
     const data = await requestJSON(`/api/projects/${encodeURIComponent(slug)}/git/revert`, {
@@ -1026,7 +1091,7 @@ function gitGraphHTML(slug, graphData, targetId) {
             <strong>${escapeHTML(commit.short_hash)} ${escapeHTML(commit.subject || "")}</strong>
             <span>${escapeHTML(commit.date || "")} ${escapeHTML((commit.refs || []).filter((ref) => ref !== "HEAD").join(" · "))}</span>
           </div>
-          <button type="button" class="secondary compact" onclick="rollbackToCommit('${escapeAttr(slug)}', '${escapeAttr(commit.hash)}', '${escapeAttr(targetId)}')">${escapeHTML(t("rollback_to_save"))}</button>
+          <button type="button" class="secondary compact" onclick="showRestoreConfirmation('${escapeAttr(slug)}', '${escapeAttr(commit.hash)}', '${escapeAttr(commit.short_hash)}', '${escapeAttr(commit.subject || "")}', '${escapeAttr(targetId)}')">${escapeHTML(t("rollback_to_save"))}</button>
         </article>`).join("") : `<p class="muted-row">${escapeHTML(t("no_commits"))}</p>`}
     </div>`;
 }
@@ -1052,7 +1117,7 @@ function gitGraphHTML(slug, graphData, targetId) {
             <strong>${escapeHTML(commit.short_hash)} ${escapeHTML(commit.subject || "")}</strong>
             <span>${escapeHTML(commit.date || "")} ${escapeHTML((commit.refs || []).filter((ref) => ref !== "HEAD").join(" / "))}</span>
           </div>
-          <button type="button" class="secondary compact" onclick="rollbackToCommit('${escapeAttr(slug)}', '${escapeAttr(commit.hash)}', '${escapeAttr(targetId)}')">${escapeHTML(t("rollback_to_save"))}</button>
+          <button type="button" class="secondary compact" onclick="showRestoreConfirmation('${escapeAttr(slug)}', '${escapeAttr(commit.hash)}', '${escapeAttr(commit.short_hash)}', '${escapeAttr(commit.subject || "")}', '${escapeAttr(targetId)}')">${escapeHTML(t("rollback_to_save"))}</button>
         </article>`).join("") : `<p class="muted-row">${escapeHTML(t("no_commits"))}</p>`}
     </div>`;
 }
@@ -1080,19 +1145,6 @@ function gitFileRow(file) {
       <span class="git-status-badge ${escapeAttr(kind)}">${escapeHTML(label)}</span>
       <span class="git-file-path">${escapeHTML(path)}</span>
     </div>`;
-}
-
-function selectedGitPaths(targetId = "project_detail_pane") {
-  return Array.from(document.querySelectorAll(`#${targetId} .git-path-checkbox:checked`)).map((node) => node.value);
-}
-
-async function loadFileDiff(slug, path, targetId = "project_detail_pane") {
-  try {
-    const data = await requestJSON(`/api/projects/${encodeURIComponent(slug)}/git/diff?path=${encodeURIComponent(path)}`);
-    $(`${targetId}_git_diff_output`).innerHTML = `<h4>${escapeHTML(path)}</h4><pre>${escapeHTML([data.cached_diff, data.diff].filter(Boolean).join("\n"))}</pre>`;
-  } catch (error) {
-    $(`${targetId}_git_diff_output`).innerHTML = `<p class="error-text">${escapeHTML(error.message)}</p>`;
-  }
 }
 
 function gitResultHTML(data) {
@@ -1233,13 +1285,102 @@ function renderAssetGallery() {
 
 async function loadSkills() {
   try {
-    const data = await requestJSON("/api/hastur/skills");
+    const projectSlug = $("skill_project_slug") ? $("skill_project_slug").value : state.selectedProject;
+    const query = projectSlug ? `?project_slug=${encodeURIComponent(projectSlug)}` : "";
+    const data = await requestJSON(`/api/skills${query}`);
     state.skills = data.skills || [];
     const preferred = state.skills.find((skill) => skill.name === "godot-remote-executor") || state.skills[0];
     state.selectedSkill = preferred ? preferred.name : "godot-remote-executor";
     renderSkillPicker();
+    renderSkillsPanel();
+    if ($("skillsMessage")) setMessage("skillsMessage", t("skills_loaded"), "success");
   } catch (error) {
-    setMessage("chatMessage", error.message, "error");
+    setMessage($("skillsMessage") ? "skillsMessage" : "chatMessage", error.message, "error");
+  }
+}
+
+function triggerSkillFiles() {
+  $("skill_files").click();
+}
+
+function renderSkillFileLabel() {
+  const input = $("skill_files");
+  const label = $("skill_files_label");
+  if (!input || !label) return;
+  const count = input.files ? input.files.length : 0;
+  label.textContent = count ? `${count} ${t("skill_files_selected")}` : t("skill_no_files");
+}
+
+async function uploadSkill() {
+  const input = $("skill_files");
+  const scope = $("skill_scope").value || "global";
+  const projectSlug = $("skill_project_slug").value || state.selectedProject;
+  if (!input || !input.files || !input.files.length) {
+    setMessage("skillsMessage", t("skill_no_files"), "error");
+    return;
+  }
+  if (scope === "project" && !projectSlug) {
+    setMessage("skillsMessage", t("select_project_hint"), "error");
+    return;
+  }
+  try {
+    const files = [];
+    for (const file of Array.from(input.files)) {
+      const dataUrl = await readAsDataURL(file);
+      const comma = dataUrl.indexOf(",");
+      files.push({
+        filename: file.name,
+        relative_path: file.webkitRelativePath || file.name,
+        media_type: file.type || "application/octet-stream",
+        data: comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl,
+      });
+    }
+    const result = await requestJSON("/api/skills/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope, project_slug: scope === "project" ? projectSlug : "", files }),
+    });
+    input.value = "";
+    renderSkillFileLabel();
+    setMessage("skillsMessage", result.message || t("skill_uploaded"), "success");
+    await loadSkills();
+  } catch (error) {
+    setMessage("skillsMessage", error.message, "error");
+  }
+}
+
+function renderSkillsPanel() {
+  const output = $("skills_output");
+  if (!output) return;
+  if (!state.skills.length) {
+    output.innerHTML = `<p class="muted-row">${escapeHTML(t("skill_no_files"))}</p>`;
+    return;
+  }
+  output.innerHTML = state.skills.map((skill) => `
+    <article class="skill-admin-card">
+      <header>
+        <div>
+          <strong>/${escapeHTML(skill.name)}</strong>
+          <span class="scope-pill">${escapeHTML(skill.scope || "")}</span>
+          <span class="scope-pill">${escapeHTML(skill.readonly ? t("readonly_skill") : t("user_skill"))}</span>
+        </div>
+        ${skill.readonly ? "" : `<button type="button" class="secondary compact" onclick="deleteSkill('${escapeAttr(skill.scope)}', '${escapeAttr(skill.name)}')">${escapeHTML(t("delete_skill"))}</button>`}
+      </header>
+      <p>${escapeHTML(skill.description || "")}</p>
+      ${skill.when_to_use ? `<p class="muted-row">${escapeHTML(skill.when_to_use)}</p>` : ""}
+      <p class="muted-row">${escapeHTML(skill.path_label || skill.path || "")}</p>
+    </article>`).join("");
+}
+
+async function deleteSkill(scope, name) {
+  const projectSlug = $("skill_project_slug") ? $("skill_project_slug").value : state.selectedProject;
+  try {
+    const query = projectSlug ? `?project_slug=${encodeURIComponent(projectSlug)}` : "";
+    const result = await requestJSON(`/api/skills/${encodeURIComponent(scope)}/${encodeURIComponent(name)}${query}`, { method: "DELETE" });
+    setMessage("skillsMessage", result.message || t("delete_skill"), "success");
+    await loadSkills();
+  } catch (error) {
+    setMessage("skillsMessage", error.message, "error");
   }
 }
 
@@ -1334,7 +1475,8 @@ function renderAssetFileLabel() {
   label.textContent = count ? `${count} ${t("asset_files_selected")}` : t("asset_no_files");
 }
 
-async function sendHasturChat(confirmed = false, answer = "") {
+async function sendHasturChat(workflowMode = "auto") {
+  if (typeof workflowMode !== "string") workflowMode = "auto";
   const slug = $("hastur_project_slug").value;
   const instruction = $("chat_instruction").value.trim();
   if (!slug || !instruction) {
@@ -1346,17 +1488,19 @@ async function sendHasturChat(confirmed = false, answer = "") {
   const skillName = detectSkill(instruction);
   setMessage("chatMessage", t("sending_chat"));
   addChatMessage("user", instruction, state.chatAttachments);
+  beginTaskPanel({ instruction, workflowMode, skillName });
   state.activeAssistantMessage = createAssistantMessage();
   try {
     const task = await requestJSON(`/api/projects/${encodeURIComponent(slug)}/hastur/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ instruction, skill_name: skillName, confirmed, attachments: state.chatAttachments }),
+      body: JSON.stringify({ instruction, skill_name: skillName, workflow_mode: workflowMode, attachments: state.chatAttachments }),
     });
     state.activeTask = { ...task, instruction };
     openTaskStream(slug, task.task_id);
   } catch (error) {
-    appendAssistantDelta(error.message);
+    renderTaskFailure(error.message);
+    appendAssistantDelta(safeChatText(error.message));
     setMessage("chatMessage", error.message, "error");
     setChatBusy(false);
   }
@@ -1365,8 +1509,11 @@ async function sendHasturChat(confirmed = false, answer = "") {
 function openTaskStream(slug, taskId) {
   const source = new EventSource(`/api/projects/${encodeURIComponent(slug)}/hastur/tasks/${encodeURIComponent(taskId)}/events`);
   state.activeEventSource = source;
-  ["thought_delta", "assistant_delta", "user_prompt", "final", "error"].forEach((type) => {
-    source.addEventListener(type, (event) => handleTaskEvent(JSON.parse(event.data)));
+  ["thought_delta", "assistant_delta", "task_breakdown", "task_progress", "user_prompt", "final", "error"].forEach((type) => {
+    source.addEventListener(type, (event) => {
+      const payload = parseTaskEvent(event, type);
+      if (payload) handleTaskEvent(payload);
+    });
   });
   source.onerror = () => {
     source.close();
@@ -1375,15 +1522,39 @@ function openTaskStream(slug, taskId) {
   };
 }
 
+function parseTaskEvent(event, fallbackType) {
+  if (!event || !event.data || event.data === "undefined") return null;
+  try {
+    return JSON.parse(event.data);
+  } catch (error) {
+    console.warn("Ignored malformed task event", fallbackType, error);
+    return null;
+  }
+}
+
 function handleTaskEvent(event) {
   const type = event.type || "status";
   const kind = type === "error" ? "error" : type === "final" ? "success" : "";
-  if (type === "thought_delta") appendAssistantThought(event.detail && event.detail.delta ? event.detail.delta : event.message || "");
-  if (type === "assistant_delta") appendAssistantDelta(event.detail && event.detail.delta ? event.detail.delta : event.message || "");
-  if (type !== "thought_delta" && type !== "assistant_delta") setMessage("chatMessage", event.message || "", kind);
-  if (type === "user_prompt") renderTaskModal(event);
-  if (type === "final") appendAssistantFinal(event.message || t("chat_done"));
-  if (type === "error") appendAssistantError(event.message || "Task failed.");
+  if (type === "thought_delta") appendWorkLog(event.detail && event.detail.delta ? event.detail.delta : event.message || "", event);
+  if (type === "assistant_delta") appendAssistantDelta(safeChatText(event.detail && event.detail.delta ? event.detail.delta : event.message || ""));
+  if (type === "task_breakdown" || type === "task_progress") renderTaskPanel(event.detail || {}, event);
+  if (!["thought_delta", "assistant_delta", "task_breakdown", "task_progress"].includes(type)) setMessage("chatMessage", event.message || "", kind);
+  if (type === "user_prompt") {
+    renderTaskPanel({ phase: event.state || "awaiting_user" }, event);
+    if (state.activeEventSource) {
+      state.activeEventSource.close();
+      state.activeEventSource = null;
+    }
+    renderTaskModal(event);
+  }
+  if (type === "final") {
+    renderTaskPanel({ phase: "complete" }, event);
+    appendAssistantFinal(safeChatText(event.message || t("chat_done")));
+  }
+  if (type === "error") {
+    renderTaskFailure(event.message || "Task failed.", event);
+    appendAssistantError(safeChatText(event.message || t("task_failed_brief")));
+  }
   if (type === "final") refreshChatGit();
   if (type === "final" || type === "error") {
     if (state.activeEventSource) state.activeEventSource.close();
@@ -1408,6 +1579,7 @@ async function resumeActiveTask(answer = "", confirmed = false, choiceId = "", r
   try {
     closeTaskModal();
     setChatBusy(true);
+    startAssistantContinuation();
     await requestJSON(`/api/projects/${encodeURIComponent(slug)}/hastur/tasks/${encodeURIComponent(state.activeTask.task_id)}/resume`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1415,7 +1587,8 @@ async function resumeActiveTask(answer = "", confirmed = false, choiceId = "", r
     });
     openTaskStream(slug, state.activeTask.task_id);
   } catch (error) {
-    appendAssistantDelta(error.message);
+    renderTaskFailure(error.message);
+    appendAssistantDelta(safeChatText(error.message));
     setChatBusy(false);
   }
 }
@@ -1428,9 +1601,11 @@ async function cancelActiveTask() {
   state.activeEventSource = null;
   try {
     await requestJSON(`/api/projects/${encodeURIComponent(slug)}/hastur/tasks/${encodeURIComponent(taskId)}/cancel`, { method: "POST" });
+    renderTaskFailure(t("task_cancelled"));
     appendAssistantError(t("task_cancelled"));
   } catch (error) {
-    appendAssistantError(error.message);
+    renderTaskFailure(error.message);
+    appendAssistantError(safeChatText(error.message));
   }
   finalizeAssistantMessage();
   state.activeTask = null;
@@ -1440,9 +1615,11 @@ async function cancelActiveTask() {
 
 function setChatBusy(busy) {
   const button = $("chat_send_button");
+  const planButton = $("chat_plan_button");
   const stopButton = $("chat_stop_button");
   const input = $("chat_instruction");
   if (button) button.disabled = busy;
+  if (planButton) planButton.disabled = busy;
   if (stopButton) stopButton.classList.toggle("hidden", !busy);
   if (input) input.disabled = busy;
 }
@@ -1455,47 +1632,61 @@ function renderTaskModal(event) {
   setChatBusy(false);
   state.taskWaiting = true;
   if ($("chat_send_button")) $("chat_send_button").disabled = true;
+  if ($("chat_plan_button")) $("chat_plan_button").disabled = true;
   const detail = event.detail || {};
   title.textContent = detail.title || t("confirmation_needed");
   body.innerHTML = userPromptHTML(event, detail);
+  bindTaskModalChoices(body);
   modal.classList.remove("hidden");
 }
 
 function userPromptHTML(event, detail) {
-  const choices = detail.choices || [];
-  const imageStatus = detail.image_status || "none";
-  const imageUrl = imageStatus === "available" ? detail.image_url || "" : "";
-  const imageError = detail.image_error || (imageStatus && imageStatus !== "available" && imageStatus !== "none" && imageStatus !== "not_requested" ? t("image_unavailable") : "");
-  const hasInput = Boolean(detail.requires_input || detail.input_label || !choices.length);
-  const inputLabel = detail.input_label || t("answer_and_continue");
+  const choices = Array.isArray(detail.choices) ? detail.choices : [];
+  const inputRequired = Boolean(detail.requires_input);
+  const fallbackInputLabel = state.language === "zh" ? "\u5176\u4ed6\u610f\u89c1\u6216\u81ea\u5b9a\u4e49\u65b9\u6848" : t("custom_reply");
+  const inputLabel = choices.length ? fallbackInputLabel : (detail.input_label || fallbackInputLabel);
+  const customButtonLabel = choices.length
+    ? (state.language === "zh" ? "\u63d0\u4ea4\u81ea\u5b9a\u4e49\u65b9\u6848" : "Submit custom option")
+    : t("answer_and_continue");
   return `
     <p>${escapeHTML(detail.body || event.message || "")}</p>
-    ${imageUrl ? `<img class="visual-checkpoint-image" src="${escapeAttr(imageUrl)}" alt="Visual checkpoint" onerror="handlePromptImageError(this)">` : ""}
-    ${imageError ? `<p class="muted-row visual-checkpoint-error">${escapeHTML(imageError)}</p>` : ""}
-    <div class="choice-list">
-      ${choices.map((choice) => `<button type="button" class="choice-card" onclick="resumePromptChoice('${escapeAttr(choice.id || "")}')"><strong>${escapeHTML(choice.label || choice.id || "")}</strong><span>${escapeHTML(choice.description || "")}</span></button>`).join("")}
-    </div>
-    ${hasInput ? `<label><span>${escapeHTML(inputLabel)}</span><textarea id="task_prompt_answer" rows="3"></textarea></label>` : ""}
-    ${hasInput || !choices.length ? `<button type="button" class="secondary" onclick="resumePromptAnswer()">${escapeHTML(t("answer_and_continue"))}</button>` : ""}`;
+    ${choices.length ? `<div class="choice-list">
+      ${choices.map((choice) => `<button type="button" class="choice-card" data-task-choice-id="${escapeAttr(choice.id || "")}"><strong>${escapeHTML(choice.label || choice.id || "")}</strong><span>${escapeHTML(choice.description || "")}</span></button>`).join("")}
+    </div>` : ""}
+    <div class="custom-reply-box">
+      <label><span>${escapeHTML(inputLabel)}</span><textarea id="task_prompt_answer" rows="3" ${inputRequired ? "required" : ""}></textarea></label>
+      <button type="button" class="secondary" onclick="resumePromptAnswer()">${escapeHTML(customButtonLabel)}</button>
+    </div>`;
 }
 
-function handlePromptImageError(image) {
-  if (!image) return;
-  image.classList.add("hidden");
-  const error = document.createElement("p");
-  error.className = "muted-row visual-checkpoint-error";
-  error.textContent = t("image_load_failed");
-  image.insertAdjacentElement("afterend", error);
+function bindTaskModalChoices(body) {
+  body.querySelectorAll("[data-task-choice-id]").forEach((button) => {
+    button.addEventListener("click", () => resumePromptChoice(button.dataset.taskChoiceId || ""));
+  });
 }
 
 function resumePromptChoice(choiceId) {
-  const answer = $("task_prompt_answer") ? $("task_prompt_answer").value : "";
+  const answer = promptAnswerValue(false);
+  if (answer === null) return;
   resumeActiveTask(answer, false, choiceId);
 }
 
 function resumePromptAnswer() {
-  const answer = $("task_prompt_answer") ? $("task_prompt_answer").value : "";
+  const answer = promptAnswerValue();
+  if (answer === null) return;
   resumeActiveTask(answer, false);
+}
+
+function promptAnswerValue(validateRequired = true) {
+  const input = $("task_prompt_answer");
+  if (!input) return "";
+  const answer = input.value || "";
+  if (validateRequired && input.hasAttribute("required") && !answer.trim()) {
+    if (typeof input.reportValidity === "function") input.reportValidity();
+    input.focus();
+    return null;
+  }
+  return answer;
 }
 
 function closeTaskModal() {
@@ -1518,12 +1709,11 @@ function createAssistantMessage() {
   const messages = $("chat_messages");
   const article = document.createElement("article");
   article.className = "chat-message assistant streaming";
-  article.innerHTML = `<div class="assistant-thinking"></div><div class="assistant-text" data-placeholder="${escapeAttr(t("thinking_placeholder"))}"></div><div class="assistant-actions hidden"></div>`;
+  article.innerHTML = `<div class="assistant-text" data-placeholder="${escapeAttr(t("thinking_placeholder"))}"></div><div class="assistant-actions hidden"></div>`;
   messages.appendChild(article);
   messages.scrollTop = messages.scrollHeight;
   return {
     article,
-    thinking: article.querySelector(".assistant-thinking"),
     text: article.querySelector(".assistant-text"),
     actions: article.querySelector(".assistant-actions"),
   };
@@ -1532,6 +1722,198 @@ function createAssistantMessage() {
 function ensureAssistantMessage() {
   if (!state.activeAssistantMessage) state.activeAssistantMessage = createAssistantMessage();
   return state.activeAssistantMessage;
+}
+
+function startAssistantContinuation() {
+  if (state.activeAssistantMessage) finalizeAssistantMessage();
+  state.activeAssistantMessage = createAssistantMessage();
+}
+
+function beginTaskPanel(task) {
+  state.taskError = "";
+  state.workLog = [];
+  state.taskProgress = {
+    phase: "intake",
+    instruction: task.instruction || "",
+    workflow_mode: task.workflowMode || "auto",
+    skill_name: task.skillName || "",
+    complexity: "",
+    execution_strategy: "",
+    current_task_id: "",
+    tasks: [],
+  };
+  renderTaskPanel(state.taskProgress);
+  renderWorkLog();
+}
+
+function renderTaskPanel(detail = {}, event = null) {
+  const overview = $("task_overview");
+  const list = $("task_list");
+  const pill = $("task_state_pill");
+  if (!overview || !list || !pill) return;
+
+  const previous = state.taskProgress || {};
+  const next = { ...previous, ...detail };
+  if (Array.isArray(detail.tasks)) next.tasks = detail.tasks;
+  if (!next.phase) next.phase = (event && event.state) || previous.phase || "idle";
+  if (event && event.state && !detail.phase) next.phase = event.state;
+  state.taskProgress = next;
+
+  const phase = next.phase || "idle";
+  pill.textContent = taskPhaseLabel(phase);
+  pill.className = `status-pill ${taskPhaseKind(phase)}`.trim();
+
+  const facts = [
+    [t("task_phase"), taskPhaseLabel(phase)],
+    [t("task_strategy"), next.execution_strategy || next.workflow_mode || "-"],
+    [t("task_complexity"), next.complexity || "-"],
+  ];
+  overview.innerHTML = `
+    <dl>
+      ${facts.map(([key, value]) => `<dt>${escapeHTML(key)}</dt><dd>${escapeHTML(value)}</dd>`).join("")}
+    </dl>
+    ${next.instruction ? `<p class="muted-row">${escapeHTML(next.instruction)}</p>` : ""}`;
+
+  const tasks = Array.isArray(next.tasks) ? next.tasks : [];
+  if (!tasks.length) {
+    list.innerHTML = "";
+    if (phase === "idle") {
+      overview.innerHTML = `<p class="muted-row">${escapeHTML(t("task_idle_note"))}</p>`;
+    }
+    renderTaskError();
+    return;
+  }
+
+  const activeId = next.current_task_id || (tasks.find((task) => task.status === "active") || {}).id || "";
+  const heading = tasks.length === 1
+    ? (state.language === "zh" ? "\u5f53\u524d\u4efb\u52a1" : "Current task")
+    : (state.language === "zh" ? "\u4efb\u52a1\u5217\u8868" : "Task list");
+  list.innerHTML = `
+    <div class="task-list-heading">${escapeHTML(heading)}</div>
+    <ol>
+      ${tasks.map((task, index) => {
+        const status = task.status || "pending";
+        const isActive = (task.id || "") === activeId || status === "active";
+        const title = task.title || task.id || `Task ${index + 1}`;
+        const goal = task.goal || "";
+        return `<li class="task-item ${escapeAttr(status)}${isActive ? " active" : ""}">
+          <span class="task-index">${index + 1}</span>
+          <span class="task-copy"><strong>${escapeHTML(title)}</strong>${goal ? `<small>${escapeHTML(goal)}</small>` : ""}</span>
+          <span class="task-status">${escapeHTML(taskStatusLabel(status, isActive))}</span>
+        </li>`;
+      }).join("")}
+    </ol>`;
+  renderTaskError();
+}
+
+function renderTaskError(message = "") {
+  if (message) state.taskError = message;
+  const node = $("task_error");
+  if (!node) return;
+  node.textContent = state.taskError || "";
+  node.classList.toggle("hidden", !state.taskError);
+}
+
+function renderTaskFailure(message, event = null) {
+  const clean = safeChatText(message || t("task_failed_brief"));
+  renderTaskPanel({ phase: (event && event.state) || "failed" }, event);
+  renderTaskError(clean);
+}
+
+function taskPhaseLabel(phase) {
+  const labels = state.language === "zh"
+    ? {
+        idle: "\u7a7a\u95f2",
+        intake: "\u63a5\u6536\u4efb\u52a1",
+        context: "\u8bfb\u53d6\u4e0a\u4e0b\u6587",
+        planning: "\u89c4\u5212\u4e2d",
+        awaiting_user: "\u7b49\u5f85\u786e\u8ba4",
+        executing: "\u6267\u884c\u4e2d",
+        repairing: "\u4fee\u590d\u4e2d",
+        verifying: "\u9a8c\u8bc1\u4e2d",
+        complete: "\u5df2\u5b8c\u6210",
+        failed: "\u5931\u8d25",
+        cancelled: "\u5df2\u53d6\u6d88",
+      }
+    : {
+        idle: "Idle",
+        intake: "Starting",
+        context: "Loading context",
+        planning: "Planning",
+        awaiting_user: "Waiting for input",
+        executing: "Executing",
+        repairing: "Repairing",
+        verifying: "Verifying",
+        complete: "Complete",
+        failed: "Failed",
+        cancelled: "Cancelled",
+      };
+  return labels[phase] || phase || t("idle");
+}
+
+function taskPhaseKind(phase) {
+  if (phase === "complete") return "success";
+  if (phase === "failed" || phase === "cancelled") return "error";
+  if (phase && phase !== "idle") return "active";
+  return "";
+}
+
+function taskStatusLabel(status, active) {
+  if (active) return state.language === "zh" ? "\u6267\u884c\u4e2d" : "active";
+  const labels = state.language === "zh"
+    ? { pending: "\u5f85\u6267\u884c", completed: "\u5df2\u5b8c\u6210", failed: "\u5931\u8d25", skipped: "\u5df2\u8df3\u8fc7" }
+    : { pending: "pending", completed: "done", failed: "failed", skipped: "skipped" };
+  return labels[status] || status || "";
+}
+
+function appendWorkLog(delta, event = null) {
+  const text = safeWorkLogText(delta);
+  if (!text && !String(delta || "").trim()) return;
+  const detail = event && event.detail ? event.detail : {};
+  const kind = detail.kind || event?.type || "work";
+  const phase = event?.state || "";
+  const last = state.workLog[state.workLog.length - 1];
+  if (last && last.kind === kind && last.phase === phase) {
+    last.text += text;
+  } else {
+    state.workLog.push({ text: text.trimStart(), kind, phase });
+  }
+  state.workLog = state.workLog.slice(-40);
+  renderWorkLog();
+  if (event && event.state) renderTaskPanel({ phase: event.state }, event);
+}
+
+function renderWorkLog() {
+  const node = $("task_work_log");
+  if (!node) return;
+  if (!state.workLog.length) {
+    node.innerHTML = `<p class="muted-row">${escapeHTML(t("work_log_empty"))}</p>`;
+    return;
+  }
+  node.innerHTML = state.workLog.map((entry) => `
+    <div class="work-log-entry">
+      <strong>${escapeHTML(taskPhaseLabel(entry.phase || entry.kind || "context"))}</strong>
+      ${escapeHTML(entry.text)}
+    </div>`).join("");
+  node.scrollTop = node.scrollHeight;
+}
+
+function clearWorkLog() {
+  state.workLog = [];
+  renderWorkLog();
+}
+
+function safeWorkLogText(text) {
+  return String(text || "").replace(/\r\n/g, "\n");
+}
+
+function safeChatText(text) {
+  const value = String(text || "").replace(/\r\n/g, "\n").trim();
+  if (!value) return "";
+  if (/```|executeContext|EditorInterface|ProjectSettings|broker_response|gdscript|extends\s+RefCounted|func\s+execute/i.test(value)) {
+    return t("task_failed_brief");
+  }
+  return value.length > 2400 ? `${value.slice(0, 2400).trim()}...` : value;
 }
 
 function appendAssistantDelta(delta) {
@@ -1543,12 +1925,7 @@ function appendAssistantDelta(delta) {
 }
 
 function appendAssistantThought(delta) {
-  if (!delta) return;
-  const assistant = ensureAssistantMessage();
-  assistant.thinking.textContent += delta;
-  assistant.thinking.classList.toggle("hidden", !assistant.thinking.textContent.trim());
-  const messages = $("chat_messages");
-  messages.scrollTop = messages.scrollHeight;
+  appendWorkLog(delta, { type: "thought_delta", state: "planning", detail: { kind: "work" } });
 }
 
 function appendAssistantFinal(text) {
@@ -1582,7 +1959,7 @@ function detectSkill(text) {
   const first = text.trim().split(/\s+/)[0] || "";
   if (first.startsWith("/")) {
     const skill = first.slice(1);
-    if (state.skills.some((item) => item.name === skill)) return skill;
+    if (state.skills.some((item) => item.name === skill && item.user_invocable !== false)) return skill;
   }
   return state.selectedSkill || "godot-remote-executor";
 }
@@ -1591,7 +1968,7 @@ function renderSkillPicker(filter = "") {
   const picker = $("skill_picker");
   if (!picker) return;
   const needle = filter.replace(/^\//, "").toLowerCase();
-  const skills = state.skills.filter((skill) => !needle || skill.name.toLowerCase().includes(needle)).slice(0, 8);
+  const skills = state.skills.filter((skill) => skill.user_invocable !== false && (!needle || skill.name.toLowerCase().includes(needle))).slice(0, 8);
   picker.innerHTML = skills.map((skill) => `<button type="button" onclick="chooseSkill('${escapeAttr(skill.name)}')"><strong>/${escapeHTML(skill.name)}</strong><span>${escapeHTML(skill.description || "")}</span></button>`).join("");
   picker.classList.toggle("hidden", !filter.startsWith("/") || !skills.length);
 }
@@ -1700,6 +2077,12 @@ window.addEventListener("DOMContentLoaded", () => {
   setLanguage(state.language);
   showView(state.view);
   $("asset_project_slug").addEventListener("change", loadAssetsForSelectedProject);
+  $("skill_scope").addEventListener("change", loadSkills);
+  $("skill_project_slug").addEventListener("change", () => {
+    state.skillProject = $("skill_project_slug").value;
+    localStorage.setItem("skillProject", state.skillProject);
+    loadSkills();
+  });
   $("hastur_project_slug").addEventListener("change", () => {
     state.selectedProject = $("hastur_project_slug").value;
     localStorage.setItem("selectedProject", state.selectedProject);
@@ -1718,6 +2101,7 @@ window.addEventListener("DOMContentLoaded", () => {
     renderChatAttachments();
   });
   $("asset_files").addEventListener("change", renderAssetFileLabel);
+  $("skill_files").addEventListener("change", renderSkillFileLabel);
   loadSettings();
   loadProjects();
   loadSkills();

@@ -188,6 +188,10 @@ button:disabled {
   grid-column: 2;
 }
 
+.skills-panel {
+  grid-column: 1;
+}
+
 .project-workbench {
   grid-column: 1 / -1;
 }
@@ -351,6 +355,12 @@ textarea {
   color: var(--success);
 }
 
+.status-pill.active {
+  border-color: #8cc9c0;
+  color: var(--brand-dark);
+  background: #edf8f6;
+}
+
 .status-pill.error {
   border-color: #f3c4bd;
   color: var(--danger);
@@ -451,7 +461,11 @@ dd {
   font-size: 13px;
 }
 
-.chat-shell,
+.chat-shell {
+  width: min(1360px, 100%);
+  margin: 0 auto;
+}
+
 .image-shell {
   width: min(1120px, 100%);
   margin: 0 auto;
@@ -482,7 +496,7 @@ dd {
   flex-direction: column;
   gap: 12px;
   min-height: 360px;
-  max-height: 58vh;
+  max-height: 62vh;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -492,11 +506,26 @@ dd {
 
 .agent-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
   gap: 16px;
   min-width: 0;
 }
 
+.chat-main {
+  min-width: 0;
+}
+
+.agent-sidebar {
+  display: grid;
+  gap: 12px;
+  align-self: start;
+  min-width: 0;
+  position: sticky;
+  top: 12px;
+}
+
+.task-panel,
+.work-log-panel,
 .chat-git-panel {
   min-width: 0;
   border: 1px solid var(--line);
@@ -574,18 +603,132 @@ dd {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
 }
 
-.assistant-thinking {
-  margin-bottom: 10px;
-  border-left: 3px solid var(--line);
-  padding-left: 10px;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.55;
+.assistant-text {
   white-space: pre-wrap;
 }
 
-.assistant-text {
+.task-overview {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.task-overview dl {
+  margin-bottom: 0;
+}
+
+.task-list {
+  display: grid;
+  gap: 8px;
+}
+
+.task-list:empty {
+  display: none;
+}
+
+.task-list-heading,
+.work-log-heading {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.task-list ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.task-item.active {
+  border-color: #8cc9c0;
+  background: #edf8f6;
+}
+
+.task-item.completed .task-status {
+  color: var(--success);
+}
+
+.task-item.failed .task-status {
+  color: var(--danger);
+}
+
+.task-index {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #e6f1ef;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.task-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.task-copy strong,
+.task-copy small {
+  overflow-wrap: anywhere;
+}
+
+.task-copy small,
+.task-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.task-error {
+  margin-top: 10px;
+  border: 1px solid #f0b4ae;
+  border-radius: 8px;
+  background: #fff7f6;
+  color: var(--danger);
+  padding: 10px;
+  overflow-wrap: anywhere;
+}
+
+.work-log {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.work-log p {
+  margin-bottom: 0;
+}
+
+.work-log-entry {
+  border-left: 3px solid var(--line);
+  padding: 8px 10px;
+  background: #fff;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.work-log-entry strong {
+  display: block;
+  color: var(--text);
+  font-size: 12px;
+  margin-bottom: 3px;
 }
 
 .chat-message.assistant.streaming .assistant-text:empty::before {
@@ -607,6 +750,13 @@ dd {
   background: #f7fbfa;
   color: var(--text);
   border: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.choice-card:hover,
+.choice-card:focus-visible {
+  border-color: var(--brand);
+  background: #eef8f6;
 }
 
 .choice-card span {
@@ -614,19 +764,12 @@ dd {
   font-size: 13px;
 }
 
-.visual-checkpoint-image {
-  display: block;
-  width: 100%;
-  max-height: 360px;
-  object-fit: contain;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f6f8f7;
-  margin: 12px 0;
-}
-
-.visual-checkpoint-error {
-  margin: 8px 0 12px;
+.custom-reply-box {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 12px;
 }
 
 .git-file-list {
@@ -881,7 +1024,7 @@ dd {
 
 .composer {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 92px;
+  grid-template-columns: 42px minmax(0, 1fr) 92px 92px 92px;
   gap: 10px;
   align-items: end;
   margin-top: 12px;
@@ -896,6 +1039,43 @@ dd {
   display: grid;
   gap: 14px;
   margin-top: 16px;
+}
+
+.skill-admin-list {
+  display: grid;
+  gap: 10px;
+}
+
+.skill-admin-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdfc;
+  padding: 12px;
+}
+
+.skill-admin-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: start;
+}
+
+.skill-admin-card p {
+  margin-bottom: 0;
+}
+
+.scope-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .asset-card {
@@ -947,6 +1127,7 @@ code {
   .settings-panel,
   .hastur-config-panel,
   .project-panel,
+  .skills-panel,
   .project-workbench {
     grid-column: auto;
   }
@@ -964,6 +1145,10 @@ code {
 
   .chat-message {
     max-width: 100%;
+  }
+
+  .agent-sidebar {
+    position: static;
   }
 }
 

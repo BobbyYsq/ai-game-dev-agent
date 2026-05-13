@@ -9,7 +9,7 @@ from typing import Any
 from app.models.llm_provider import get_llm_provider
 from app.services.asset_service import get_project_dir
 from app.services.hastur_service import apply_hastur_code, hastur_executors
-from app.services.hastur_skill_service import load_hastur_skill
+from app.services.hastur_skill_service import get_skill_metadata, skill_listing_for_prompt
 from app.services.settings_service import load_private_settings
 
 
@@ -37,7 +37,7 @@ def chat_with_hastur_skill(
 ) -> dict[str, Any]:
     project_dir = get_project_dir(project_slug)
     settings = load_private_settings()
-    skill_text = load_hastur_skill(skill_name)
+    skill_summary = _selected_skill_summary(skill_name, project_slug)
     executors = hastur_executors()
     uploaded = [*(images or []), *(attachments or [])]
     llm_images = [item for item in uploaded if str(item.get("media_type", "")).startswith("image/")]
@@ -46,7 +46,8 @@ def chat_with_hastur_skill(
         project_dir=str(project_dir),
         instruction=instruction,
         skill_name=skill_name,
-        skill_text=skill_text,
+        skill_listing=skill_listing_for_prompt(project_slug),
+        skill_summary=skill_summary,
         base_url=str(settings.get("hastur_base_url", "http://localhost:5302")),
         has_token=bool(settings.get("hastur_auth_token")),
         executors=executors,
@@ -121,18 +122,21 @@ def _build_prompt(
     project_dir: str,
     instruction: str,
     skill_name: str,
-    skill_text: str,
+    skill_listing: str,
+    skill_summary: str,
     base_url: str,
     has_token: bool,
     executors: dict[str, Any],
     attachments: list[dict[str, str]],
 ) -> str:
     return f"""
-Use this vendored Hastur skill as the operating procedure:
+Use the lightweight capability and skill index below. Do not assume full skill bodies are loaded in this legacy endpoint.
 
---- SKILL {skill_name} ---
-{skill_text[:18000]}
---- END SKILL ---
+Selected skill:
+{skill_summary}
+
+Available skills:
+{skill_listing}
 
 App-bound runtime context:
 - Project slug: {project_slug}
@@ -159,8 +163,23 @@ Return JSON only in this shape:
 
 If the task can be answered without executing code, leave "code" empty.
 If the task would start/stop a game, add/remove autoloads, delete data, reset state, or otherwise interrupt the user, set "requires_confirmation": true.
+If executing code, call executeContext.output("result", text) with a non-empty user-displayable result.
 Do not include auth tokens in the JSON.
 """.strip()
+
+
+def _selected_skill_summary(skill_name: str, project_slug: str) -> str:
+    try:
+        skill = get_skill_metadata(skill_name, project_slug=project_slug)
+    except FileNotFoundError:
+        return f"- /{skill_name}: metadata unavailable."
+    parts = [
+        f"- /{skill.name} ({skill.scope})",
+        f"description={skill.description!r}" if skill.description else "",
+        f"when_to_use={skill.when_to_use!r}" if skill.when_to_use else "",
+        f"path={skill.path_label or skill.path}",
+    ]
+    return " ".join(part for part in parts if part)
 
 
 def _parse_response(raw: str) -> dict[str, Any]:

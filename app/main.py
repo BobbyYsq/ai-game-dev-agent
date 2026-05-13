@@ -10,6 +10,7 @@ from app.api.routes_git import router as git_router
 from app.api.routes_godot_projects import router as godot_projects_router
 from app.api.routes_projects import router as projects_router
 from app.api.routes_settings import router as settings_router
+from app.api.routes_skills import router as skills_router
 from app.config import APP_VERSION, ensure_workspace_dirs
 
 
@@ -24,6 +25,7 @@ def create_app() -> FastAPI:
     app.include_router(assets_router)
     app.include_router(hastur_router)
     app.include_router(git_router)
+    app.include_router(skills_router)
     templates = Jinja2Templates(directory="app/templates")
 
     @app.get("/", response_class=HTMLResponse)

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import base64
 import json
 import queue
 import re
@@ -15,13 +14,14 @@ from app.config import PROJECT_ROOT
 from app.models.llm_provider import get_llm_provider
 from app.services.asset_service import get_project_dir
 from app.services.hastur_chat_service import (
+    _attachment_summary,
     _execution_readiness,
     _parse_response,
     _public_attachment_list,
     encode_upload,
 )
 from app.services.hastur_service import apply_hastur_code, hastur_executors
-from app.services.hastur_skill_service import list_hastur_skills, load_hastur_skill
+from app.services.hastur_skill_service import list_hastur_skills, load_hastur_skill, skill_listing_for_prompt
 from app.services.settings_service import load_private_settings
 
 
@@ -32,7 +32,6 @@ TASK_STATES = {
     "awaiting_user",
     "executing",
     "repairing",
-    "visual_review",
     "verifying",
     "complete",
     "failed",
@@ -40,6 +39,7 @@ TASK_STATES = {
 }
 
 DEFAULT_SKILL_NAME = "godot-remote-executor"
+MAX_REPEATED_REPAIR_FAILURES = 3
 
 GODOT_DOCS = [
     "godot-docs/tutorials/plugins/editor/installing_plugins.rst.txt",
@@ -51,6 +51,11 @@ GODOT_DOCS = [
     "godot-docs/classes/class_editorinterface.rst.txt",
     "godot-docs/classes/class_basis.rst.txt",
     "godot-docs/classes/class_node3d.rst.txt",
+    "godot-docs/classes/class_mesh.rst.txt",
+    "godot-docs/classes/class_arraymesh.rst.txt",
+    "godot-docs/classes/class_meshdatatool.rst.txt",
+    "godot-docs/classes/class_surfacetool.rst.txt",
+    "godot-docs/classes/class_basematerial3d.rst.txt",
     "godot-docs/tutorials/assets_pipeline/importing_3d_scenes/model_export_considerations.rst.txt",
     "godot-docs/tutorials/3d/environment_and_post_processing.rst.txt",
 ]
@@ -62,6 +67,7 @@ class HasturTaskSession:
     project_slug: str
     instruction: str
     skill_name: str
+    workflow_mode: str = "auto"
     attachments: list[dict[str, str]] = field(default_factory=list)
     confirmed: bool = False
     answer: str = ""
@@ -84,6 +90,10 @@ class HasturTaskSession:
     execution_complete: bool = False
     final_ready: bool = False
     post_execution_feedback: str = ""
+    needs_resume_thought: bool = False
+    context_request_keys: set[str] = field(default_factory=set)
+    vision_summary: str = ""
+    current_task_id: str = ""
 
 
 _SESSIONS: dict[str, HasturTaskSession] = {}
@@ -100,15 +110,18 @@ def create_task(
     skill_name: str | None = None,
     attachments: list[dict[str, str]] | None = None,
     confirmed: bool = False,
+    workflow_mode: str = "auto",
 ) -> dict[str, Any]:
     project_dir = get_project_dir(project_slug)
     explicit = _instruction_has_skill_prefix(instruction)
-    selected_skill = skill_name if explicit and skill_name else detect_skill(instruction)
+    selected_skill = skill_name if explicit and skill_name else detect_skill(instruction, project_slug)
+    mode = workflow_mode if workflow_mode in {"auto", "plan"} else "auto"
     session = HasturTaskSession(
         task_id=uuid4().hex,
         project_slug=project_slug,
         instruction=instruction,
         skill_name=selected_skill,
+        workflow_mode=mode,
         attachments=attachments or [],
         confirmed=confirmed,
         skill_explicit=explicit,
@@ -123,6 +136,7 @@ def create_task(
         "project_slug": project_slug,
         "project_path": str(project_dir),
         "skill_name": selected_skill,
+        "workflow_mode": mode,
     }
 
 
@@ -152,9 +166,8 @@ def resume_task(
     if confirmed:
         session.confirmed = True
 
-    if pending == "skill_confirmation":
-        _resume_skill_confirmation(session)
-    elif pending == "pre_execution_prompt":
+    if pending == "pre_execution_prompt":
+        selected = _selected_prompt_choice(session)
         session.plan = None
         session.confirmed = False
         session.plan_announced = False
@@ -162,19 +175,22 @@ def resume_task(
         session.final_ready = False
         session.next_step_index = 0
         session.prior_results = []
+        session.context_request_keys = set()
         if session.choice_id:
-            session.answer = "\n".join(filter(None, [session.answer, f"Selected option: {session.choice_id}"]))
+            session.answer = _append_selected_choice_context(session.answer, session.choice_id, selected)
     elif pending == "plan_confirmation":
         selected = _selected_prompt_choice(session)
         action = str(selected.get("action") or "")
-        if action in {"confirm", "continue", "execute"} or session.choice_id in {"confirm_plan", "confirm", "continue", "execute"} or confirmed:
-            session.confirmed = True
-        elif action == "revise" and not session.revision_request:
+        if action == "revise" and not session.revision_request:
             session.revision_request = session.answer or "Revise the plan."
+        elif action in {"confirm", "continue", "execute"} or session.choice_id or confirmed:
+            session.confirmed = True
+            if session.choice_id:
+                session.answer = _append_selected_choice_context(session.answer, session.choice_id, selected)
+            if isinstance(session.plan, dict):
+                session.plan = {**session.plan, "user_prompt": None}
         elif session.answer and not session.revision_request:
             session.revision_request = session.answer
-        elif session.choice_id:
-            session.revision_request = f"Selected option: {session.choice_id}"
         if session.revision_request:
             session.plan = None
             session.confirmed = False
@@ -183,25 +199,8 @@ def resume_task(
             session.final_ready = False
             session.next_step_index = 0
             session.prior_results = []
+            session.context_request_keys = set()
             session.answer = "\n".join(filter(None, [session.answer, f"Plan revision request: {session.revision_request}"]))
-    elif pending == "post_execution_review":
-        selected = _selected_prompt_choice(session)
-        action = str(selected.get("action") or "")
-        if action == "finish" and not session.answer:
-            session.final_ready = True
-        else:
-            feedback_parts = []
-            if session.choice_id:
-                feedback_parts.append(f"Selected option: {session.choice_id}")
-            if session.answer:
-                feedback_parts.append(session.answer)
-            if selected.get("description"):
-                feedback_parts.append(f"Option detail: {selected.get('description')}")
-            session.post_execution_feedback = "\n".join(feedback_parts).strip() or "Adjust the result based on the selected option."
-            session.execution_complete = False
-            session.final_ready = False
-            session.confirmed = True
-
     session.pending = ""
     session.pending_prompt = {}
     session.started = False
@@ -210,6 +209,7 @@ def resume_task(
     session.events = []
     session.event_queue = queue.Queue()
     session.state = "context"
+    session.needs_resume_thought = True
     return {"success": True, "task_id": task_id, "state": session.state}
 
 
@@ -238,20 +238,35 @@ def stream_task_events(task_id: str) -> Iterator[str]:
         yield _sse(item)
 
 
-def detect_skill(instruction: str) -> str:
+def detect_skill(instruction: str, project_slug: str | None = None) -> str:
     first = instruction.strip().split(maxsplit=1)[0] if instruction.strip() else ""
-    skills = list_hastur_skills()
+    skills = list_hastur_skills(project_slug)
     names = {skill.name for skill in skills}
     if first.startswith("/") and first[1:] in names:
         return first[1:]
     lower = instruction.lower()
     for skill in skills:
+        if skill.disable_model_invocation:
+            continue
         haystack = f"{skill.name} {skill.description}".lower()
         if skill.name == _default_skill_name():
+            continue
+        if skill.paths and not _skill_paths_match_instruction(skill.paths, lower):
             continue
         if any(word in haystack for word in re.findall(r"[a-zA-Z][a-zA-Z_-]{3,}", lower)):
             return skill.name
     return _default_skill_name()
+
+
+def _skill_paths_match_instruction(paths: list[str], instruction: str) -> bool:
+    for path in paths:
+        normalized = path.replace("\\", "/").lower().strip()
+        if normalized and normalized in instruction:
+            return True
+        name = Path(normalized).name
+        if name and name in instruction:
+            return True
+    return False
 
 
 def _run_task(session: HasturTaskSession) -> None:
@@ -260,25 +275,14 @@ def _run_task(session: HasturTaskSession) -> None:
         project_dir = get_project_dir(session.project_slug)
         docs = _load_godot_docs()
         executors = hastur_executors()
-        _emit_activity(
-            session,
-            "context",
-            "context",
-            "Loaded project context, Godot docs, and vendored Hastur skill.",
-            {
-                "project_path": str(project_dir),
-                "docs": [item["path"] for item in docs],
-                "skill": session.skill_name,
-                "attachments": _public_attachment_list(session.attachments),
-            },
-        )
 
         readiness = _execution_readiness(load_private_settings(), executors)
         if readiness:
             _emit(session, "error", "failed", readiness, {"executors": executors})
             return
 
-        skill_text = load_hastur_skill(session.skill_name)
+        skill_text = _skill_body_for_session(session)
+        _ensure_attachment_observations(session)
         if session.final_ready:
             final = _final_task_response(session, session.plan or {})
             _emit(session, "final", "complete", final, {"results": session.prior_results, "summary": final})
@@ -286,6 +290,7 @@ def _run_task(session: HasturTaskSession) -> None:
 
         if session.plan is None:
             _stream_planning_text(session, project_dir, docs, skill_text, executors)
+            session.needs_resume_thought = False
             _raise_if_cancelled(session)
             session.plan = _plan_task(session, project_dir, docs, skill_text, executors)
             session.next_step_index = 0
@@ -294,39 +299,41 @@ def _run_task(session: HasturTaskSession) -> None:
             session.execution_complete = False
             session.final_ready = False
             session.post_execution_feedback = ""
+        elif session.needs_resume_thought:
+            _stream_resume_text(session, project_dir, docs, skill_text, executors)
+            session.needs_resume_thought = False
 
-        plan = _normalize_plan(session.plan)
+        plan = _enforce_workflow_mode(session, _normalize_plan(session.plan))
+        if _plan_requires_review(session, plan) and not plan.get("user_prompt") and not session.confirmed:
+            repaired_plan = _repair_plan_missing_modal(session, project_dir, docs, skill_text, executors, plan)
+            if repaired_plan:
+                plan = _enforce_workflow_mode(session, _normalize_plan(repaired_plan))
         session.plan = plan
+        _emit_task_breakdown(session, plan)
         if _should_announce_plan(plan) and not session.plan_announced:
             _emit_assistant_delta(session, _plan_response_text(plan))
             session.plan_announced = True
 
-        if plan.get("user_prompt") and not (session.answer or session.choice_id):
-            _emit_generic_user_prompt(session, plan["user_prompt"])
+        if plan.get("user_prompt"):
+            pending = _prompt_pending_state(session, plan)
+            _emit_generic_user_prompt(session, plan["user_prompt"], pending=pending)
             return
 
         if plan.get("question") and not session.answer:
-            _emit_choice_request(session, str(plan["question"]), plan)
+            _emit(session, "error", "failed", "The LLM asked for user input without instantiating the modal tool.")
             return
 
         choices = plan.get("choices") if isinstance(plan.get("choices"), list) else []
         if choices and not session.choice_id:
-            _emit_choice_request(session, str(plan.get("summary") or "Choose how to proceed."), plan)
+            _emit(session, "error", "failed", "The LLM returned choices without instantiating the modal tool.")
             return
 
         if _plan_requires_review(session, plan) and not session.confirmed:
-            _emit_plan_confirmation_prompt(session, plan)
+            _emit(session, "error", "failed", "The LLM did not provide modal content for plan confirmation.")
             return
 
         completed = _execute_plan(session, project_dir, docs, skill_text, executors, plan)
         if completed:
-            _emit_activity(session, "verification", "verifying", "Checked broker/executor state after execution.", {"executors": hastur_executors()})
-            if _should_prompt_after_execution(plan, session):
-                checkpoint = _capture_visual_checkpoint(session, project_dir, "Task result") if _plan_needs_visual_check(plan) else _empty_visual_checkpoint()
-                checkpoint["analysis"] = _analyze_visual_checkpoint(checkpoint, project_dir)
-                prompt = _build_post_execution_user_prompt(session, project_dir, docs, skill_text, executors, plan, checkpoint)
-                _emit_post_execution_prompt(session, prompt, checkpoint)
-                return
             final = _final_task_response(session, plan)
             _emit(session, "final", "complete", final, {"results": session.prior_results, "summary": final})
     except TaskCancelled:
@@ -356,6 +363,25 @@ def _stream_planning_text(
     _emit_thought_delta(session, text)
 
 
+def _stream_resume_text(
+    session: HasturTaskSession,
+    project_dir: Path,
+    docs: list[dict[str, str]],
+    skill_text: str,
+    executors: dict[str, Any],
+) -> None:
+    llm = get_llm_provider()
+    prompt = _resume_chat_prompt(session, project_dir, docs, skill_text, executors)
+    stream = getattr(llm, "generate_text_stream", None)
+    if callable(stream):
+        for chunk in stream(prompt, system_prompt=_planning_chat_system_prompt()):
+            _raise_if_cancelled(session)
+            _emit_thought_delta(session, str(chunk), state="planning", kind="resume")
+        return
+    text = llm.generate_text(prompt, system_prompt=_planning_chat_system_prompt())
+    _emit_thought_delta(session, text, state="planning", kind="resume")
+
+
 def _plan_task(
     session: HasturTaskSession,
     project_dir: Path,
@@ -363,10 +389,103 @@ def _plan_task(
     skill_text: str,
     executors: dict[str, Any],
 ) -> dict[str, Any]:
-    prompt = _task_prompt(session, project_dir, docs, skill_text, executors)
-    raw = get_llm_provider().generate_text(prompt, system_prompt=_task_system_prompt())
-    parsed = _parse_response(raw)
+    context_snippets: list[str] = []
+    llm = get_llm_provider()
+    for attempt in range(3):
+        prompt = _task_prompt(session, project_dir, docs, skill_text, executors, context_snippets)
+        raw = llm.generate_text(prompt, system_prompt=_task_system_prompt())
+        parsed = _parse_response(raw)
+        requests = parsed.get("context_requests") if isinstance(parsed, dict) else []
+        if attempt < 2 and isinstance(requests, list) and requests:
+            resolved = _resolve_context_requests(session, requests)
+            if resolved:
+                context_snippets.extend(resolved)
+                continue
+        return _normalize_plan(parsed)
     return _normalize_plan(parsed)
+
+
+def _repair_plan_missing_modal(
+    session: HasturTaskSession,
+    project_dir: Path,
+    docs: list[dict[str, str]],
+    skill_text: str,
+    executors: dict[str, Any],
+    plan: dict[str, Any],
+) -> dict[str, Any] | None:
+    invalid_response = ""
+    for attempt in range(2):
+        prompt = f"""
+The previous planner JSON requires user approval but did not instantiate the abstract modal tool.
+Return the full corrected planner JSON. Keep the same task intent, but add user_prompt with LLM-authored title, body, choices, input_label, and requires_input.
+The UI renders exactly the choices you provide, in the order and count you choose; do not assume there are exactly two choices and do not add fixed generic defaults.
+Every visible choice label and description must be authored for this specific task. For plan approval, include at least one approval/continue/execute choice with an action such as "confirm", "continue", or "execute"; add revision/alternative choices only when they are useful.
+Do not create a choice whose purpose is "I will type/provide my own answer/path/details"; the custom reply box already handles that.
+The custom reply box is always rendered separately for alternate user instructions or revisions. When choices are present, input_label should describe alternate instructions, not repeat the main question. Set requires_input true only when a custom text answer is mandatory.
+Do not generate GDScript here.
+
+Project path: {project_dir}
+User request: {session.instruction}
+Workflow mode: {session.workflow_mode}
+Previous plan:
+{json.dumps(plan, ensure_ascii=False)}
+{f'''
+Previous invalid repair response:
+{invalid_response}
+''' if invalid_response else ''}
+
+Capability registry:
+{_capability_registry_text()}
+
+Available skills:
+{skill_listing_for_prompt(session.project_slug)}
+
+Godot docs index:
+{_docs_summary(docs)}
+
+Loaded skill/context snippets:
+{_context_snippets_text(skill_text, [])}
+
+Connected executors:
+{json.dumps(executors, ensure_ascii=False)}
+
+Return JSON only with user_prompt populated.
+""".strip()
+        raw = get_llm_provider().generate_text(prompt, system_prompt=_task_system_prompt())
+        parsed = _parse_response(raw)
+        repaired = _coerce_repaired_modal_plan(plan, parsed)
+        if repaired:
+            return repaired
+        invalid_response = str(raw)[:2000]
+    return None
+
+
+def _coerce_repaired_modal_plan(plan: dict[str, Any], parsed: Any) -> dict[str, Any] | None:
+    if not isinstance(parsed, dict):
+        return None
+
+    prompt = parsed.get("user_prompt") if isinstance(parsed.get("user_prompt"), dict) else None
+    if not prompt:
+        for key in ("modal", "prompt", "confirmation_prompt", "userPrompt"):
+            value = parsed.get(key)
+            if isinstance(value, dict):
+                prompt = value
+                break
+    if not prompt and _looks_like_user_prompt_object(parsed):
+        prompt = parsed
+    if not prompt:
+        return None
+
+    repaired = dict(plan)
+    if prompt is not parsed:
+        repaired.update(parsed)
+    repaired["user_prompt"] = prompt
+    return repaired
+
+
+def _looks_like_user_prompt_object(value: dict[str, Any]) -> bool:
+    prompt_keys = {"title", "body", "message", "input_label", "choices", "requires_input"}
+    return bool(prompt_keys.intersection(value)) and bool(value.get("body") or value.get("message") or value.get("title"))
 
 
 def _execute_plan(
@@ -380,13 +499,59 @@ def _execute_plan(
     steps = plan.get("steps") or []
     direct_code = _direct_plan_code(plan)
     if not steps and not direct_code:
+        _complete_all_tasks(session, "skipped")
         return True
 
     if session.execution_complete:
         return True
 
+    if _execution_strategy(plan) == "sequential_subtasks" and len(plan.get("task_breakdown") or []) > 1 and not direct_code:
+        completed = _execute_sequential_tasks(session, project_dir, docs, skill_text, executors, plan)
+        if completed:
+            session.execution_complete = True
+            session.post_execution_feedback = ""
+            session.next_step_index = len(steps)
+        return completed
+
+    task_id = _first_task_id(plan)
+    completed = _execute_one_batch(session, project_dir, docs, skill_text, executors, plan, task_id)
+    if completed:
+        session.execution_complete = True
+        session.post_execution_feedback = ""
+        session.next_step_index = len(steps)
+    return completed
+
+
+def _execute_sequential_tasks(
+    session: HasturTaskSession,
+    project_dir: Path,
+    docs: list[dict[str, str]],
+    skill_text: str,
+    executors: dict[str, Any],
+    plan: dict[str, Any],
+) -> bool:
+    tasks = plan.get("task_breakdown") or []
+    for task in tasks:
+        task_id = str(task.get("id") or "")
+        subplan = _subtask_plan(plan, task)
+        if not _execute_one_batch(session, project_dir, docs, skill_text, executors, subplan, task_id):
+            return False
+    return True
+
+
+def _execute_one_batch(
+    session: HasturTaskSession,
+    project_dir: Path,
+    docs: list[dict[str, str]],
+    skill_text: str,
+    executors: dict[str, Any],
+    plan: dict[str, Any],
+    task_id: str,
+) -> bool:
     _raise_if_cancelled(session)
+    _set_task_status(session, task_id, "active", "executing", f"Working on { _task_title(plan, task_id) }.")
     feedback = session.post_execution_feedback
+    direct_code = _direct_plan_code(plan)
     if direct_code and not feedback:
         message = "Executing the LLM-selected direct Hastur action."
         code = direct_code
@@ -398,30 +563,74 @@ def _execute_plan(
         session.prior_results.append({"success": False, "message": "The LLM did not return executable GDScript for the batch."})
         repaired = _repair_failed_batch(session, project_dir, docs, skill_text, executors, plan, session.prior_results)
         if not repaired:
+            _set_task_status(session, task_id, "failed", "failed", "The current task could not produce executable GDScript.")
             _emit(session, "error", "failed", "The LLM did not return executable GDScript for the batch.", {"results": session.prior_results})
             return False
-        session.execution_complete = True
-        session.post_execution_feedback = ""
-        session.next_step_index = len(steps)
+        _set_task_status(session, task_id, "completed", "executing", "The current task completed after repair.")
         return True
 
     result = apply_hastur_code(session.project_slug, code, executor_type="editor")
     payload = result.model_dump()
     session.prior_results.append(payload)
     _emit_activity(session, "execution_result", "executing", result.message, {"result": payload})
-    if not result.success:
+    if result.success:
+        output_failure = _missing_output_contract_result(session, plan, payload)
+        if output_failure:
+            session.prior_results.append(output_failure)
+            repaired = _repair_failed_batch(session, project_dir, docs, skill_text, executors, plan, session.prior_results)
+            if not repaired:
+                _set_task_status(session, task_id, "failed", "failed", output_failure["message"])
+                _emit(session, "error", "failed", output_failure["message"], {"results": session.prior_results})
+                return False
+    else:
         if _is_unrecoverable_hastur_failure(payload):
+            _set_task_status(session, task_id, "failed", "failed", result.message)
             _emit(session, "error", "failed", result.message, {"results": session.prior_results})
             return False
         repaired = _repair_failed_batch(session, project_dir, docs, skill_text, executors, plan, session.prior_results)
         if not repaired:
+            _set_task_status(session, task_id, "failed", "failed", "Hastur execution failed and could not be repaired.")
             _emit(session, "error", "failed", "Hastur execution failed and could not be repaired.", {"results": session.prior_results})
             return False
 
-    session.execution_complete = True
-    session.post_execution_feedback = ""
-    session.next_step_index = len(steps)
+    _set_task_status(session, task_id, "completed", "executing", "The current task completed.")
     return True
+
+
+def _execution_strategy(plan: dict[str, Any]) -> str:
+    value = str(plan.get("execution_strategy") or "").strip()
+    return value if value in {"single_batch", "sequential_subtasks", "ask_first"} else "single_batch"
+
+
+def _first_task_id(plan: dict[str, Any]) -> str:
+    tasks = plan.get("task_breakdown") if isinstance(plan.get("task_breakdown"), list) else []
+    if tasks:
+        return str(tasks[0].get("id") or "task_1")
+    return "task_1"
+
+
+def _task_title(plan: dict[str, Any], task_id: str) -> str:
+    for task in plan.get("task_breakdown") or []:
+        if str(task.get("id") or "") == task_id:
+            return str(task.get("title") or task_id)
+    return str(plan.get("summary") or task_id)
+
+
+def _subtask_plan(plan: dict[str, Any], task: dict[str, Any]) -> dict[str, Any]:
+    copied = dict(plan)
+    step = {
+        "title": task.get("title") or "Task",
+        "goal": task.get("goal") or task.get("title") or "",
+        "type": task.get("kind") or "editor",
+        "requires_confirmation": bool(task.get("requires_confirmation")),
+    }
+    copied["mode"] = "plan"
+    copied["summary"] = step["title"]
+    copied["steps"] = [step]
+    copied["task_breakdown"] = [dict(task)]
+    copied["execution_strategy"] = "single_batch"
+    copied["code"] = ""
+    return copied
 
 
 def _generate_batch_code(
@@ -449,6 +658,7 @@ def _repair_failed_batch(
     prior_results: list[dict[str, Any]],
 ) -> bool:
     attempt = 1
+    repeated_failures: dict[str, int] = {}
     while True:
         _raise_if_cancelled(session)
         _emit_activity(
@@ -464,6 +674,8 @@ def _repair_failed_batch(
         repair_code = _extract_executable_code(parsed, raw)
         if not repair_code:
             prior_results.append({"success": False, "message": "Repair response did not include executable GDScript."})
+            if _record_repair_failure(repeated_failures, prior_results[-1]):
+                return False
             attempt += 1
             continue
         repair_result = apply_hastur_code(session.project_slug, repair_code, executor_type="editor")
@@ -471,95 +683,33 @@ def _repair_failed_batch(
         prior_results.append(payload)
         _emit_activity(session, "repair_result", "repairing", repair_result.message, {"result": payload})
         if repair_result.success:
+            output_failure = _missing_output_contract_result(session, plan, payload)
+            if output_failure:
+                prior_results.append(output_failure)
+                if _record_repair_failure(repeated_failures, output_failure):
+                    return False
+                attempt += 1
+                continue
             return True
         if _is_unrecoverable_hastur_failure(payload):
+            return False
+        if _record_repair_failure(repeated_failures, payload):
             return False
         attempt += 1
 
 
-def _capture_visual_checkpoint(session: HasturTaskSession, project_dir: Path, title: str) -> dict[str, Any]:
-    filename = f"checkpoint_{int(time.time())}_{uuid4().hex[:8]}.png"
-    rel_path = f"assets/generated/visual_checkpoints/{filename}"
-    res_path = f"res://{rel_path}"
-    code = "\n".join(
-        [
-            "await RenderingServer.frame_post_draw",
-            "var image: Image = null",
-            "for viewport in [EditorInterface.get_editor_viewport_3d(0), EditorInterface.get_editor_viewport_2d()]:",
-            "\tif viewport == null:",
-            "\t\tcontinue",
-            "\tvar texture := viewport.get_texture()",
-            "\tif texture == null:",
-            "\t\tcontinue",
-            "\tvar candidate := texture.get_image()",
-            "\tif candidate != null and not candidate.is_empty():",
-            "\t\timage = candidate",
-            "\t\tbreak",
-            "if image == null or image.is_empty():",
-            "\timage = DisplayServer.screen_get_image(DisplayServer.SCREEN_OF_MAIN_WINDOW)",
-            "if image == null or image.is_empty():",
-            "\tvar screen_rect := Rect2i(Vector2i.ZERO, DisplayServer.window_get_size())",
-            "\timage = DisplayServer.screen_get_image_rect(screen_rect)",
-            "if image == null or image.is_empty():",
-            "\texecuteContext.output(\"image_status\", \"missing\")",
-            "\texecuteContext.output(\"image_error\", \"Editor and screen screenshot capture returned an empty image.\")",
-            "else:",
-            "\tvar dir_path := ProjectSettings.globalize_path(\"res://assets/generated/visual_checkpoints\")",
-            "\tDirAccess.make_dir_recursive_absolute(dir_path)",
-            f"\tvar image_path := {json.dumps(res_path)}",
-            "\tvar absolute_path := ProjectSettings.globalize_path(image_path)",
-            "\tvar save_error := image.save_png(absolute_path)",
-            "\tif save_error != OK:",
-            "\t\texecuteContext.output(\"image_status\", \"missing\")",
-            "\t\texecuteContext.output(\"image_error\", \"Could not save visual checkpoint: \" + error_string(save_error))",
-            "\telse:",
-            "\t\texecuteContext.output(\"image_status\", \"available\")",
-            "\t\texecuteContext.output(\"image_path\", image_path)",
-        ]
-    )
-    result = apply_hastur_code(session.project_slug, code, executor_type="editor")
-    payload = result.model_dump()
-    output_path = _extract_output_value(payload.get("broker_response"), "image_path") or res_path
-    image_status = _extract_output_value(payload.get("broker_response"), "image_status") or ""
-    image_error = _extract_output_value(payload.get("broker_response"), "image_error") or ""
-    filename_from_output = Path(str(output_path).replace("res://", "")).name
-    absolute = project_dir / "assets" / "generated" / "visual_checkpoints" / filename_from_output
-    file_available = absolute.exists() and absolute.is_file() and absolute.stat().st_size > 0
-    if not file_available:
-        image_status = "missing"
-        image_error = image_error or "No non-empty PNG file was created for this checkpoint."
-    else:
-        image_status = "available"
-    return {
-        "success": result.success and file_available,
-        "title": title,
-        "image_path": str(output_path),
-        "image_url": f"/api/projects/{session.project_slug}/visual-checkpoints/{filename_from_output}" if file_available else "",
-        "image_status": image_status,
-        "image_error": image_error,
-        "absolute_path": str(absolute),
-        "result": payload,
-    }
+def _record_repair_failure(repeated_failures: dict[str, int], result: dict[str, Any]) -> bool:
+    signature = _repair_failure_signature(result)
+    repeated_failures[signature] = repeated_failures.get(signature, 0) + 1
+    return repeated_failures[signature] >= MAX_REPEATED_REPAIR_FAILURES
 
 
-def _analyze_visual_checkpoint(checkpoint: dict[str, Any], project_dir: Path) -> str:
-    path = Path(checkpoint.get("absolute_path") or "")
-    if checkpoint.get("image_status") != "available" or not path.exists() or not path.is_file() or path.stat().st_size <= 0:
-        return "No screenshot was available for automatic visual analysis."
-    llm = get_llm_provider()
-    if not getattr(llm, "supports_images", False) or not hasattr(llm, "generate_text_with_images"):
-        return "The current LLM provider does not support image input, so visual tuning needs manual confirmation."
-    image = {
-        "filename": path.name,
-        "media_type": "image/png",
-        "data": base64.b64encode(path.read_bytes()).decode("ascii"),
-    }
-    prompt = (
-        "Analyze this Godot editor viewport checkpoint for lighting/post-processing balance. "
-        "Mention overexposure, low contrast, darkness, and whether the current result should be kept. "
-        "Return a concise user-facing recommendation."
-    )
-    return llm.generate_text_with_images(prompt, [image], system_prompt="You are a practical Godot visual review assistant.")
+def _repair_failure_signature(result: dict[str, Any]) -> str:
+    contract = result.get("output_contract") if isinstance(result.get("output_contract"), dict) else {}
+    reason = str(contract.get("reason") or "")
+    message = str(result.get("message") or "")
+    broker_error = _broker_error_text(result.get("broker_response"))
+    return "|".join([reason, message, broker_error])[:1200]
 
 
 def _extract_executable_code(parsed: dict[str, Any], raw: str = "") -> str:
@@ -585,7 +735,172 @@ def _looks_like_gdscript(text: str) -> bool:
     if not text:
         return False
     first = text.lstrip().splitlines()[0].strip()
-    return first.startswith(("extends ", "@tool", "func ", "var ", "if ", "for ", "EditorInterface.", "ProjectSettings."))
+    if first.startswith(
+        (
+            "extends ",
+            "@tool",
+            "func ",
+            "var ",
+            "const ",
+            "if ",
+            "for ",
+            "while ",
+            "match ",
+            "EditorInterface.",
+            "ProjectSettings.",
+            "ResourceSaver.",
+            "ClassDB.",
+            "InputMap.",
+            "DisplayServer.",
+            "RenderingServer.",
+            "executeContext.",
+            "execute_context.",
+            "print(",
+            "push_error(",
+        )
+    ):
+        return True
+    if re.match(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+\s*\(", first):
+        return True
+    return bool(re.match(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\s*(?::=|=)\s*.+", first))
+
+
+def _capability_registry_text() -> str:
+    return """
+- modal: Abstract user prompt tool. You may instantiate it by returning user_prompt with title, body, optional input_label, requires_input, and choices. The agent renders your modal copy and however many concrete choices you provide. Do not include an "I will type my own answer" choice because the custom reply box is always visible for alternate instructions; requires_input only means that custom reply is mandatory.
+- skills: Use the skill listing to decide whether a skill is relevant. Request full skill content with context_requests when needed.
+- godot_docs: Use the docs index to request small local snippets by path or keyword. Do not assume the full docs are in context.
+- hastur_editor_batch: The agent can execute one complete editor GDScript batch only after your direct code or an approved plan.
+- task_breakdown: Classify complexity and list one task for simple work or multiple tasks for phased work. The agent displays the list and current active task.
+""".strip()
+
+
+def _skill_body_for_session(session: HasturTaskSession) -> str:
+    if not session.skill_explicit:
+        return ""
+    try:
+        return load_hastur_skill(session.skill_name, project_slug=session.project_slug)
+    except FileNotFoundError:
+        return ""
+
+
+def _context_snippets_text(skill_text: str, snippets: list[str]) -> str:
+    sections = []
+    if skill_text:
+        sections.append("--- selected skill body ---\n" + skill_text[:6000])
+    sections.extend(snippet[:5000] for snippet in snippets if snippet.strip())
+    return "\n\n".join(sections) if sections else "No full skill or Godot doc body is loaded yet. Use context_requests if needed."
+
+
+def _resolve_context_requests(session: HasturTaskSession, requests: list[Any]) -> list[str]:
+    snippets: list[str] = []
+    for request in requests:
+        if not isinstance(request, dict):
+            continue
+        key = _context_request_key(request, session)
+        if key in session.context_request_keys:
+            continue
+        request_type = str(request.get("type") or "").strip()
+        if request_type == "skill":
+            name = str(request.get("name") or session.skill_name).strip()
+            try:
+                body = load_hastur_skill(name, project_slug=session.project_slug)
+                snippets.append(f"--- skill:{name} ---\n{body[:6000]}")
+                session.context_request_keys.add(key)
+            except FileNotFoundError:
+                continue
+        elif request_type == "godot_doc":
+            path = str(request.get("path") or "").strip()
+            query = str(request.get("query") or "").strip()
+            text = _read_godot_doc(path)
+            if text:
+                snippets.append(f"--- {path} ---\n{_doc_excerpt(text, query)}")
+                session.context_request_keys.add(key)
+        elif request_type == "godot_doc_search":
+            query = str(request.get("query") or "").strip()
+            if query:
+                found = _search_godot_docs(query)
+                if found:
+                    snippets.extend(found)
+                    session.context_request_keys.add(key)
+    return snippets
+
+
+def _context_request_key(request: dict[str, Any], session: HasturTaskSession) -> str:
+    request_type = str(request.get("type") or "").strip()
+    name = str(request.get("name") or session.skill_name).strip()
+    path = str(request.get("path") or "").replace("\\", "/").strip()
+    query = str(request.get("query") or "").strip().lower()
+    return "|".join([request_type, name, path, query])
+
+
+def _ensure_attachment_observations(session: HasturTaskSession) -> None:
+    if session.vision_summary:
+        return
+    images = [item for item in session.attachments if str(item.get("media_type", "")).startswith("image/")]
+    if not images:
+        return
+    llm = get_llm_provider()
+    if not getattr(llm, "supports_images", False) or not hasattr(llm, "generate_text_with_images"):
+        session.vision_summary = (
+            "Image attachments were provided, but the selected LLM provider does not support image input in this app. "
+            "Ask the user for a textual description before relying on screenshot content."
+        )
+        return
+    prompt = f"""
+Summarize the attached images for a Godot task in concise natural language.
+Focus on visible editor/game state, selected nodes, material/mesh/camera issues, and any evidence needed to solve the user's request.
+Do not invent hidden state and do not write code.
+
+User request:
+{session.instruction}
+
+Uploaded files:
+{json.dumps(_public_attachment_list(images), ensure_ascii=False)}
+""".strip()
+    raw = llm.generate_text_with_images(prompt, images, system_prompt="Describe image evidence for a Godot/Hastur task. Return concise text only.")
+    session.vision_summary = _clip_text(str(raw or "").strip(), 2000) or "Image attachments were provided, but no reliable visual observations were returned."
+
+
+def _attachment_context_text(session: HasturTaskSession) -> str:
+    return f"""
+Uploaded file summary:
+{_attachment_summary(session.attachments)}
+
+Image observations:
+{session.vision_summary or "No image observations loaded."}
+""".strip()
+
+
+def _read_godot_doc(rel_path: str) -> str:
+    normalized = rel_path.replace("\\", "/").strip("/")
+    if not normalized.startswith("godot-docs/") or ".." in Path(normalized).parts:
+        return ""
+    path = PROJECT_ROOT / normalized
+    if not path.exists() or not path.is_file():
+        return ""
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _doc_excerpt(text: str, query: str = "", limit: int = 2400) -> str:
+    if query:
+        lower = text.lower()
+        index = lower.find(query.lower())
+        if index >= 0:
+            start = max(0, index - limit // 3)
+            return text[start : start + limit]
+    return text[:limit]
+
+
+def _search_godot_docs(query: str) -> list[str]:
+    snippets: list[str] = []
+    for rel in GODOT_DOCS:
+        text = _read_godot_doc(rel)
+        if query.lower() in text.lower():
+            snippets.append(f"--- {rel} ---\n{_doc_excerpt(text, query)}")
+            if len(snippets) >= 3:
+                break
+    return snippets
 
 
 def _planning_chat_prompt(
@@ -595,6 +910,7 @@ def _planning_chat_prompt(
     skill_text: str,
     executors: dict[str, Any],
 ) -> str:
+    answer = f"\nUser answer/selection context:\n{session.answer}\n" if session.answer else ""
     return f"""
 User request:
 {session.instruction}
@@ -604,14 +920,70 @@ Project path: {project_dir}
 Selected Hastur skill: {session.skill_name}
 Uploaded files: {json.dumps(_public_attachment_list(session.attachments), ensure_ascii=False)}
 Connected executors: {json.dumps(executors, ensure_ascii=False)}
+Workflow mode: {session.workflow_mode}
+{answer}
 
-Relevant local Godot docs:
+{_attachment_context_text(session)}
+
+Capability registry:
+{_capability_registry_text()}
+
+Available skills:
+{skill_listing_for_prompt(session.project_slug)}
+
+Godot docs index:
 {_docs_summary(docs)}
 
-Vendored skill excerpt:
-{skill_text[:4000]}
+Reply to the user in natural language. Be concise and direct. Do not ask for broker tokens, broker URLs, executor IDs, or default ports; this app checks and binds that private runtime context automatically. Explain only what you are thinking about now. Do not include JSON, GDScript, modal content, or fake execution results.
+""".strip()
 
-Reply to the user in natural language. Be concise and direct. Do not ask for broker tokens, broker URLs, executor IDs, or default ports; this app checks and binds that private runtime context automatically. Explain only what you are doing now. Do not include JSON, GDScript, or fake execution results.
+
+def _resume_chat_prompt(
+    session: HasturTaskSession,
+    project_dir: Path,
+    docs: list[dict[str, str]],
+    skill_text: str,
+    executors: dict[str, Any],
+) -> str:
+    plan = _public_plan(session.plan or {})
+    selection = "\n".join(
+        part
+        for part in [
+            f"Selected choice: {session.choice_id}" if session.choice_id else "",
+            f"Custom reply: {session.answer}" if session.answer else "",
+            f"Revision request: {session.revision_request}" if session.revision_request else "",
+        ]
+        if part
+    )
+    return f"""
+The user just responded to an abstract modal. Continue the public work stream before any code generation or Hastur execution.
+
+User request:
+{session.instruction}
+
+User modal response:
+{selection or "No custom text."}
+
+Current plan:
+{json.dumps(plan, ensure_ascii=False)}
+
+Project slug: {session.project_slug}
+Project path: {project_dir}
+Selected Hastur skill: {session.skill_name}
+Connected executors: {json.dumps(executors, ensure_ascii=False)}
+
+{_attachment_context_text(session)}
+
+Capability registry:
+{_capability_registry_text()}
+
+Available skills:
+{skill_listing_for_prompt(session.project_slug)}
+
+Godot docs index:
+{_docs_summary(docs)}
+
+Reply in one or two natural-language sentences about what you are doing next. Do not include JSON, GDScript, modal content, tool tags, or fake execution results.
 """.strip()
 
 
@@ -625,21 +997,30 @@ def _task_prompt(
     docs: list[dict[str, str]],
     skill_text: str,
     executors: dict[str, Any],
+    context_snippets: list[str] | None = None,
 ) -> str:
     answer = f"\nUser answer/selection context:\n{session.answer}\n" if session.answer else ""
+    mode_rule = (
+        'Workflow mode is "plan": design a user-visible plan only. Do not write GDScript. Do not execute through Hastur. '
+        'Return mode "plan", steps, assistant-facing summary/final text, and a user_prompt that instantiates the abstract modal tool for plan confirmation.'
+        if session.workflow_mode == "plan"
+        else 'Workflow mode is "auto": decide whether direct execution, a visible plan, or a modal question is needed.'
+    )
     return f"""
-You are creating an execution plan for a local Godot project controlled through Hastur.
-Use local Godot docs and the vendored Hastur skill as constraints.
-You decide whether the request needs a visible plan, a user prompt, or direct execution.
+You are creating an execution decision for a local Godot project controlled through Hastur.
+The agent only provides abstract capabilities. You decide whether and how to use them.
+{mode_rule}
 For trivial, low-risk, single-action tasks with no missing information, set mode to "direct" and return complete GDScript in code.
 For complex, multi-step, risky, destructive, start/stop/play/autoload/rollback, or ambiguous tasks, set mode to "plan" or "ask".
 Do not include a visible plan unless you decide the user benefits from seeing or confirming it.
 Complex scene-building tasks should be described as coherent implementation phases, not tiny code-generation steps.
 For read-only inspection requests, plan the minimum steps needed to return the requested factual result; do not turn the final answer into a repeat of the task.
+Any direct GDScript must call executeContext.output("result", text) at least once with non-empty user-displayable text.
+For direction, flip, upside-down, continent, map, terrain, or orientation fixes, first identify the exact target node/resource and intended correction. If the meaning or target is unclear, instantiate the modal tool to ask before modifying. When modifying, require before/after evidence in the output.
 Prefer conservative lighting/post-processing defaults: avoid overexposure, avoid high glow, prefer ACES/AgX/Filmic style tonemapping with controlled exposure/white values when applicable.
 {_godot_coordinate_summary()}
-Only include user_prompt when choices materially change the result or when you need missing user intent before planning.
-Only set needs_visual_check true when you decide a screenshot review is necessary before continuing.
+Use user_prompt only by instantiating the abstract modal tool. All modal title, body, labels, and choices must come from you.
+If you need more context, return context_requests first instead of guessing. The agent will fetch only the requested local snippets and call you again.
 
 Project slug: {session.project_slug}
 Project path: {project_dir}
@@ -648,18 +1029,33 @@ Uploaded files: {json.dumps(_public_attachment_list(session.attachments), ensure
 Connected executors: {json.dumps(executors, ensure_ascii=False)}
 {answer}
 
-Godot docs context:
-{_docs_context(docs)}
+{_attachment_context_text(session)}
 
-Vendored skill:
-{skill_text[:20000]}
+Capability registry:
+{_capability_registry_text()}
+
+Available skills:
+{skill_listing_for_prompt(session.project_slug)}
+
+Godot docs index:
+{_docs_summary(docs)}
+
+Loaded skill/context snippets:
+{_context_snippets_text(skill_text, context_snippets or [])}
 
 User request:
 {session.instruction}
 
 Return JSON only:
 {{
+  "context_requests": [
+    {{"type": "skill", "name": "skill-name"}},
+    {{"type": "godot_doc", "path": "godot-docs/path/file.rst.txt", "query": "optional keyword"}},
+    {{"type": "godot_doc_search", "query": "optional keyword"}}
+  ],
   "mode": "direct",
+  "complexity": "simple",
+  "execution_strategy": "single_batch",
   "summary": "short user-facing plan summary",
   "read_only": false,
   "question": "",
@@ -674,27 +1070,34 @@ Return JSON only:
       "goal": "what this step changes or inspects",
       "type": "editor",
       "executor_id": "",
-      "requires_confirmation": false,
-      "needs_visual_check": false
+      "requires_confirmation": false
     }}
+  ],
+  "task_breakdown": [
+    {{"id": "task_1", "title": "one user-visible task title", "goal": "what this task will accomplish", "kind": "editor", "status": "pending", "requires_confirmation": false}}
   ],
   "code": "complete GDScript only when mode is direct; otherwise empty",
   "final": "short completion summary"
 }}
 
+Always classify task complexity. Use "simple" only for one clear low-risk action or inspection; use "multi_step" for tasks that should be solved in phases; use "ambiguous" when user intent or target is unclear; use "risky" for destructive or interruption-prone changes.
+Always return task_breakdown. If simple, return exactly one task. If multi_step, return the smallest useful sequence of user-understandable tasks.
+Set execution_strategy to "single_batch" for simple tasks or tightly coupled edits, "sequential_subtasks" when each task should be executed and verified before the next, or "ask_first" when a modal question is required before execution.
 Set mode to "direct" when no visible plan or user prompt is needed. In direct mode, steps must be empty and code must be executable GDScript for one Hastur editor execution.
 Set mode to "plan" only when you decide a visible plan is useful or user approval is needed.
 Set mode to "ask" when missing information must be collected before code or planning.
 Set question only when information is required before planning safely.
 Set requires_user_approval or step requires_confirmation for delete/remove/reset/start/stop/play/autoload/rollback operations.
 Keep choices empty unless the user needs to decide between materially different approaches.
-If user_prompt is not null, it must be an object with title, body, optional input_label, and optional choices. User-facing choices must come from you, not from fixed defaults.
+If user_prompt is not null, it must be a modal object with title, body, optional input_label, requires_input, and optional choices. User-facing choices must come from you, not fixed defaults. Choose however many concrete options the task actually needs; do not pad or truncate the list to two, and do not include a choice for "I will type/provide my own answer/path/details".
+The modal custom reply box is always visible to the user for alternate instructions or revisions. When choices are present, input_label should describe alternate instructions, not the main question. Set requires_input true only when custom text is mandatory.
+If workflow mode is "plan", code must be empty and user_prompt must ask the user whether to approve or revise your plan.
 Set read_only true for inspect/list/read tasks that should not mutate the project.
 """.strip()
 
 
 def _task_system_prompt() -> str:
-    return "You are a Godot task planner. Output operational JSON only. Never expose secrets. Do not include GDScript."
+    return "You are the LLM planner for a Godot/Hastur agent. Output JSON only. Never expose secrets."
 
 
 def _step_code_system_prompt() -> str:
@@ -717,10 +1120,13 @@ The snippet must implement the entire confirmed plan in one run. Do not split th
 The snippet must be idempotent where practical, tab-indented, and must not use Markdown fences.
 Do not ask the user to paste code. Do not expose secrets or broker tokens.
 Do not use reserved identifiers such as class_name as variable names.
+Every batch must call executeContext.output("result", text) at least once with non-empty user-displayable text. This is required for read-only and mutating tasks.
 For visual lighting/post-processing, use conservative values and avoid overexposure.
 Use EditorInterface and scene/node APIs consistent with the local Godot docs.
 For inspection/list/read requests, do not mutate the scene; collect the requested facts and return them with executeContext.output("result", text). If the user asks for the scene tree, include the complete open edited scene tree in that output.
-For mutating scene tasks, save changed scenes/resources when appropriate and emit concise outputs with executeContext.output.
+For mutating scene tasks, save changed scenes/resources when appropriate and return a concise summary of changed nodes/resources with executeContext.output("result", text).
+For direction, flip, upside-down, inverted, continent, map, terrain, or orientation fixes, inspect the target node/resource first and include Before: ... and After: ... evidence in executeContext.output("result", text). If the target or intended correction is unclear, the plan should have asked through the modal before this code generation step.
+For front/back, transparent face, material, normal, cull, winding, mesh, or terrain surface fixes, inspect the target MeshInstance3D, mesh surfaces, material cull_mode, normals, and triangle winding first; include Before: ... and After: ... evidence in executeContext.output("result", text).
 {_godot_coordinate_summary()}
 
 Project path: {project_dir}
@@ -728,19 +1134,20 @@ Selected skill: {session.skill_name}
 Connected executors: {json.dumps(executors, ensure_ascii=False)}
 User request: {session.instruction}
 User answer context: {session.answer}
+Attachment observations: {session.vision_summary or "None"}
 {adjustment}
 
 Confirmed plan:
 {json.dumps(_public_plan(plan), ensure_ascii=False)}
 
 Prior execution results:
-{json.dumps(session.prior_results[-8:], ensure_ascii=False)}
+{json.dumps(_compact_execution_results(session.prior_results[-3:]), ensure_ascii=False)}
 
 Relevant docs:
-{_docs_context(docs)}
+{_docs_summary(docs)}
 
-Vendored skill excerpt:
-{skill_text[:16000]}
+Loaded skill context:
+{_context_snippets_text(skill_text, [])}
 
 Return JSON only:
 {{"message": "brief internal summary", "code": "complete GDScript snippet or empty string"}}
@@ -761,6 +1168,9 @@ def _batch_repair_prompt(
 The previous complete Hastur GDScript batch failed. Generate ONE corrected complete batch script for the same confirmed plan.
 Inspect the exact Hastur error, broker payload, and failed code excerpt below. Do not repeat the same rejected code.
 The repair must remain a complete one-run script, tab-indented, idempotent where practical, and without Markdown fences.
+The previous run may have compiled and run successfully but failed the output contract. The corrected batch must call executeContext.output("result", text) at least once with non-empty user-displayable text. Scene-tree requests must output the complete scene tree.
+If the task is a direction, flip, upside-down, inverted, continent, map, terrain, or orientation fix, the corrected batch must output Before: ... and After: ... evidence for the exact target node/resource.
+For front/back, transparent face, material, normal, cull, winding, mesh, or terrain surface fixes, the corrected batch must output Before: ... and After: ... evidence for the target MeshInstance3D, mesh surface/material state, and the applied fix.
 
 Repair attempt: {attempt}
 Project path: {project_dir}
@@ -768,6 +1178,7 @@ Selected skill: {session.skill_name}
 Connected executors: {json.dumps(executors, ensure_ascii=False)}
 User request: {session.instruction}
 User answer context: {session.answer}
+Attachment observations: {session.vision_summary or "None"}
 Post-execution feedback if any: {session.post_execution_feedback}
 
 Confirmed plan:
@@ -777,13 +1188,13 @@ Latest error:
 {json.dumps(_result_error_context(prior_results[-1] if prior_results else {}), ensure_ascii=False)}
 
 Recent execution results:
-{json.dumps(prior_results[-8:], ensure_ascii=False)}
+{json.dumps(_compact_execution_results(prior_results[-3:]), ensure_ascii=False)}
 
 Relevant docs:
-{_docs_context(docs)}
+{_docs_summary(docs)}
 
-Vendored skill excerpt:
-{skill_text[:12000]}
+Loaded skill context:
+{_context_snippets_text(skill_text, [])}
 
 Return JSON only:
 {{"message": "brief internal summary", "code": "corrected complete GDScript snippet or empty string"}}
@@ -795,7 +1206,8 @@ def _load_godot_docs() -> list[dict[str, str]]:
     for rel in GODOT_DOCS:
         path = PROJECT_ROOT / rel
         text = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
-        docs.append({"path": rel, "text": text[:6000]})
+        title = next((line.strip() for line in text.splitlines() if line.strip() and not line.startswith("..")), Path(rel).name)
+        docs.append({"path": rel, "title": title, "text": text[:700]})
     return docs
 
 
@@ -804,7 +1216,7 @@ def _docs_context(docs: list[dict[str, str]]) -> str:
 
 
 def _docs_summary(docs: list[dict[str, str]]) -> str:
-    return "\n".join(f"- {item['path']}: {item['text'][:500].replace(chr(10), ' ')}" for item in docs)
+    return "\n".join(f"- {item['path']} ({item.get('title') or Path(item['path']).name}): {item['text'][:220].replace(chr(10), ' ')}" for item in docs)
 
 
 def _godot_coordinate_summary() -> str:
@@ -840,13 +1252,21 @@ def _normalize_plan(plan: dict[str, Any]) -> dict[str, Any]:
                 "type": str(step.get("type") or "editor"),
                 "executor_id": str(step.get("executor_id") or ""),
                 "requires_confirmation": bool(step.get("requires_confirmation")),
-                "needs_visual_check": bool(step.get("needs_visual_check")),
             }
         )
     choices = plan.get("choices") if isinstance(plan.get("choices"), list) else []
     user_prompt = plan.get("user_prompt") if isinstance(plan.get("user_prompt"), dict) else None
+    complexity = str(plan.get("complexity") or "").strip()
+    if complexity not in {"simple", "multi_step", "ambiguous", "risky"}:
+        complexity = _infer_complexity(plan, normalized_steps)
+    execution_strategy = str(plan.get("execution_strategy") or "").strip()
+    if execution_strategy not in {"single_batch", "sequential_subtasks", "ask_first"}:
+        execution_strategy = "ask_first" if mode == "ask" else "single_batch"
+    task_breakdown = _normalize_task_breakdown(plan, normalized_steps, complexity)
     return {
         "mode": mode,
+        "complexity": complexity,
+        "execution_strategy": execution_strategy,
         "summary": str(plan.get("summary") or plan.get("message") or "Plan ready."),
         "question": str(plan.get("question") or ""),
         "read_only": bool(plan.get("read_only", False)),
@@ -854,25 +1274,135 @@ def _normalize_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "user_prompt": _normalize_user_prompt(user_prompt) if user_prompt else None,
         "choices": [_normalize_choice(choice, index) for index, choice in enumerate(choices)],
         "steps": normalized_steps,
+        "task_breakdown": task_breakdown,
         "code": str(plan.get("code") or "").strip(),
-        "final": str(plan.get("final") or "Task completed. Review local Git changes manually from the Git workbench."),
+        "final": str(plan.get("final") or ""),
     }
+
+
+def _enforce_workflow_mode(session: HasturTaskSession, plan: dict[str, Any]) -> dict[str, Any]:
+    if session.workflow_mode != "plan":
+        return plan
+    enforced = dict(plan)
+    enforced["mode"] = "plan"
+    enforced["code"] = ""
+    enforced["requires_user_approval"] = True
+    if not enforced.get("steps"):
+        summary = str(enforced.get("summary") or "Review the requested Godot task.")
+        enforced["steps"] = [
+            {
+                "title": summary,
+                "goal": "Review and approve the plan before any Hastur execution.",
+                "type": "editor",
+                "executor_id": "",
+                "requires_confirmation": True,
+            }
+        ]
+    if not enforced.get("task_breakdown"):
+        enforced["task_breakdown"] = [
+            {
+                "id": "task_1",
+                "title": str(enforced.get("summary") or "Review plan"),
+                "goal": "Confirm or revise the plan before execution.",
+                "kind": "editor",
+                "status": "pending",
+                "requires_confirmation": True,
+            }
+        ]
+    return enforced
+
+
+def _infer_complexity(plan: dict[str, Any], steps: list[dict[str, Any]]) -> str:
+    if str(plan.get("mode") or "") == "ask":
+        return "ambiguous"
+    if plan.get("requires_user_approval"):
+        return "risky"
+    if len(steps) > 1:
+        return "multi_step"
+    return "simple"
+
+
+def _normalize_task_breakdown(plan: dict[str, Any], steps: list[dict[str, Any]], complexity: str) -> list[dict[str, Any]]:
+    raw_tasks = plan.get("task_breakdown") if isinstance(plan.get("task_breakdown"), list) else []
+    source = raw_tasks or steps or [{"title": plan.get("summary") or plan.get("message") or "Run task", "goal": plan.get("summary") or ""}]
+    tasks: list[dict[str, Any]] = []
+    for index, task in enumerate(source, start=1):
+        if not isinstance(task, dict):
+            task = {"title": str(task), "goal": str(task)}
+        task_id = str(task.get("id") or f"task_{index}").strip() or f"task_{index}"
+        status = str(task.get("status") or "pending").strip()
+        if status not in {"pending", "active", "completed", "failed", "skipped"}:
+            status = "pending"
+        tasks.append(
+            {
+                "id": task_id,
+                "title": str(task.get("title") or task.get("summary") or f"Task {index}"),
+                "goal": str(task.get("goal") or task.get("description") or ""),
+                "kind": str(task.get("kind") or task.get("type") or "editor"),
+                "status": status,
+                "requires_confirmation": bool(task.get("requires_confirmation")),
+            }
+        )
+    if complexity == "simple" and len(tasks) > 1:
+        first = tasks[0]
+        first["title"] = str(plan.get("summary") or first["title"])
+        first["goal"] = str(plan.get("summary") or first.get("goal") or "")
+        return [first]
+    return tasks
 
 
 def _normalize_user_prompt(prompt: dict[str, Any]) -> dict[str, Any]:
     choices = prompt.get("choices") if isinstance(prompt.get("choices"), list) else []
-    image_url = str(prompt.get("image_url") or "")
-    image_status = str(prompt.get("image_status") or ("available" if image_url else "none"))
     requires_input = prompt.get("requires_input")
+    concrete_choices = [choice for choice in choices if not _is_custom_reply_choice(choice)]
     return {
-        "title": str(prompt.get("title") or "Confirmation required"),
+        "title": str(prompt.get("title") or ""),
         "body": str(prompt.get("body") or prompt.get("message") or ""),
         "input_label": str(prompt.get("input_label") or ""),
-        "choices": [_normalize_choice(choice, index) for index, choice in enumerate(choices)],
-        "image_url": image_url,
-        "image_status": image_status,
-        "requires_input": bool(requires_input) if requires_input is not None else bool(choices or prompt.get("input_label")),
+        "choices": [_normalize_choice(choice, index) for index, choice in enumerate(concrete_choices)],
+        "requires_input": bool(requires_input) if requires_input is not None else False,
     }
+
+
+def _is_custom_reply_choice(choice: Any) -> bool:
+    if isinstance(choice, dict):
+        text = " ".join(str(choice.get(key) or "") for key in ("id", "label", "title", "description", "details", "action"))
+    else:
+        text = str(choice)
+    normalized = text.strip().lower()
+    if not normalized:
+        return False
+    custom_terms = [
+        "custom option",
+        "custom reply",
+        "custom plan",
+        "custom input",
+        "freeform",
+        "free-form",
+        "manual input",
+        "enter details",
+        "type details",
+        "provide details",
+        "provide path",
+        "input path",
+        "user input",
+        "i will input",
+        "i will provide",
+        "let me type",
+        "let me enter",
+        "我来输入",
+        "我输入",
+        "手动输入",
+        "自定义方案",
+        "自定义意见",
+        "自定义输入",
+        "其他意见",
+        "其他方案",
+        "输入路径",
+        "提供路径",
+        "填写路径",
+    ]
+    return any(term in normalized for term in custom_terms)
 
 
 def _normalize_choice(choice: Any, index: int) -> dict[str, str]:
@@ -889,10 +1419,24 @@ def _normalize_choice(choice: Any, index: int) -> dict[str, str]:
 def _public_plan(plan: dict[str, Any]) -> dict[str, Any]:
     return {
         "mode": plan.get("mode", "plan"),
+        "complexity": plan.get("complexity", "simple"),
+        "execution_strategy": plan.get("execution_strategy", "single_batch"),
         "summary": plan.get("summary", ""),
         "read_only": bool(plan.get("read_only", False)),
         "steps": [_public_step(step, index) for index, step in enumerate(plan.get("steps") or [])],
+        "task_breakdown": [_public_task(task) for task in plan.get("task_breakdown") or []],
         "final": plan.get("final", ""),
+    }
+
+
+def _public_task(task: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": task.get("id") or "",
+        "title": task.get("title") or "",
+        "goal": task.get("goal") or "",
+        "kind": task.get("kind") or "editor",
+        "status": task.get("status") or "pending",
+        "requires_confirmation": bool(task.get("requires_confirmation")),
     }
 
 
@@ -903,18 +1447,31 @@ def _public_step(step: dict[str, Any], index: int) -> dict[str, Any]:
         "goal": step.get("goal") or "",
         "type": step.get("type") or "editor",
         "requires_confirmation": bool(step.get("requires_confirmation")),
-        "needs_visual_check": bool(step.get("needs_visual_check")),
     }
 
 
 def _plan_requires_review(session: HasturTaskSession, plan: dict[str, Any]) -> bool:
+    if session.workflow_mode == "plan" and (plan.get("steps") or plan.get("requires_user_approval")):
+        return True
     if _is_read_only_plan(session, plan):
         return False
+    if plan.get("execution_strategy") == "ask_first":
+        return True
+    if plan.get("complexity") in {"multi_step", "ambiguous", "risky"} and str(plan.get("mode") or "") == "plan":
+        return True
     steps = plan.get("steps") or []
     return bool(
         plan.get("requires_user_approval")
         or any(step.get("requires_confirmation") for step in steps)
     )
+
+
+def _prompt_pending_state(session: HasturTaskSession, plan: dict[str, Any]) -> str:
+    mode = str(plan.get("mode") or "").lower()
+    has_executable_work = bool(plan.get("steps") or _direct_plan_code(plan))
+    if mode == "ask" or (plan.get("execution_strategy") == "ask_first" and not has_executable_work):
+        return "pre_execution_prompt"
+    return "plan_confirmation" if _plan_requires_review(session, plan) or session.workflow_mode == "plan" else "pre_execution_prompt"
 
 
 def _looks_like_complex_request(instruction: str) -> bool:
@@ -1013,22 +1570,26 @@ def _default_skill_name() -> str:
     return DEFAULT_SKILL_NAME if DEFAULT_SKILL_NAME in names else (next(iter(names), DEFAULT_SKILL_NAME))
 
 
-def _needs_skill_confirmation(session: HasturTaskSession) -> bool:
-    return not session.skill_explicit and not session.skill_confirmed and session.skill_name != _default_skill_name()
-
-
-def _resume_skill_confirmation(session: HasturTaskSession) -> None:
-    if session.choice_id == "skip_skill":
-        session.skill_name = _default_skill_name()
-    session.skill_confirmed = True
-    session.plan = None
-
-
 def _selected_prompt_choice(session: HasturTaskSession) -> dict[str, Any]:
     choices = session.pending_prompt.get("choices") if isinstance(session.pending_prompt, dict) else []
     if not isinstance(choices, list):
         return {}
     return next((choice for choice in choices if isinstance(choice, dict) and choice.get("id") == session.choice_id), {})
+
+
+def _append_selected_choice_context(answer: str, choice_id: str, choice: dict[str, Any]) -> str:
+    lines = [answer.strip()] if answer.strip() else []
+    lines.append(f"Selected option: {choice_id}")
+    label = str(choice.get("label") or "").strip()
+    description = str(choice.get("description") or "").strip()
+    action = str(choice.get("action") or "").strip()
+    if label:
+        lines.append(f"Selected option label: {label}")
+    if description:
+        lines.append(f"Selected option details: {description}")
+    if action:
+        lines.append(f"Selected option action: {action}")
+    return "\n".join(lines)
 
 
 def _plan_response_text(plan: dict[str, Any]) -> str:
@@ -1048,12 +1609,6 @@ def _plan_response_text(plan: dict[str, Any]) -> str:
             title = str(step.get("title") or f"Step {index}").strip()
             goal = str(step.get("goal") or "").strip()
             lines.append(f"{index}. {title}" + (f" - {goal}" if goal and goal != title else ""))
-    if plan.get("read_only"):
-        lines.append("")
-        lines.append("I will run this as one read-only Hastur batch and return the requested output in the chat.")
-    elif steps:
-        lines.append("")
-        lines.append("After you confirm, I will generate one complete Hastur batch script for the whole plan and repair that full script until it runs.")
     return "\n".join(line for line in lines if line is not None).strip() + "\n"
 
 
@@ -1067,131 +1622,16 @@ def _direct_plan_code(plan: dict[str, Any]) -> str:
     return str(plan.get("code") or "").strip()
 
 
-def _empty_visual_checkpoint() -> dict[str, Any]:
-    return {
-        "success": False,
-        "title": "Task result",
-        "image_path": "",
-        "image_url": "",
-        "image_status": "not_requested",
-        "image_error": "",
-        "absolute_path": "",
-        "result": {},
-    }
-
-
-def _build_post_execution_user_prompt(
-    session: HasturTaskSession,
-    project_dir: Path,
-    docs: list[dict[str, str]],
-    skill_text: str,
-    executors: dict[str, Any],
-    plan: dict[str, Any],
-    checkpoint: dict[str, Any],
-) -> dict[str, Any]:
-    analysis = str(checkpoint.get("analysis") or "")
-    status = str(checkpoint.get("image_status") or "none")
-    body_parts = ["The batch ran successfully."]
-    if analysis:
-        body_parts.append(analysis)
-    if status not in {"available", "not_requested", "none"}:
-        body_parts.append(str(checkpoint.get("image_error") or "No screenshot was available."))
-    body_parts.append("Choose finish, or describe what to adjust next.")
-    return {
-        "title": "Review result",
-        "body": "\n".join(part for part in body_parts if part),
-        "input_label": "Modification request",
-        "choices": [
-            {"id": "finish", "label": "Finish", "description": "Keep this result and end the task.", "action": "finish"},
-            {"id": "adjust", "label": "Modify", "description": "Use the text below to generate one complete adjustment batch.", "action": "adjust"},
-        ],
-        "image_url": checkpoint.get("image_url") if status == "available" else "",
-        "image_status": status,
-        "image_error": checkpoint.get("image_error") or "",
-        "requires_input": True,
-    }
-
-
-def _emit_skill_confirmation(session: HasturTaskSession) -> None:
-    message = f"The task appears to match the vendored skill `{session.skill_name}`. Confirm whether to use it."
-    session.pending = "skill_confirmation"
+def _emit_generic_user_prompt(session: HasturTaskSession, prompt: dict[str, Any], pending: str = "pre_execution_prompt") -> None:
     detail = {
-        "title": "Skill confirmation",
-        "body": message,
-        "input_label": "",
-        "choices": [
-            {"id": "use_skill", "label": f"Use {session.skill_name}", "description": "Apply the vendored skill workflow to this task.", "action": "continue"},
-            {"id": "skip_skill", "label": "Skip skill", "description": "Use the default Godot executor workflow instead.", "action": "continue"},
-        ],
-        "image_url": "",
-        "image_status": "none",
-        "requires_input": True,
-    }
-    _emit_user_prompt(session, message, detail)
-
-
-def _emit_generic_user_prompt(session: HasturTaskSession, prompt: dict[str, Any]) -> None:
-    detail = {
-        "title": str(prompt.get("title") or "Confirmation required"),
+        "title": str(prompt.get("title") or ""),
         "body": str(prompt.get("body") or prompt.get("message") or ""),
         "input_label": str(prompt.get("input_label") or ""),
         "choices": prompt.get("choices") or [],
-        "image_url": str(prompt.get("image_url") or ""),
-        "image_status": str(prompt.get("image_status") or "none"),
-        "requires_input": bool(prompt.get("requires_input", True)),
+        "requires_input": bool(prompt.get("requires_input", False)),
     }
-    session.pending = "pre_execution_prompt"
+    session.pending = pending
     _emit_user_prompt(session, detail["body"], detail)
-
-
-def _emit_choice_request(session: HasturTaskSession, message: str, plan: dict[str, Any]) -> None:
-    session.pending = "pre_execution_prompt"
-    detail = {
-        "title": "Choose an option",
-        "body": message,
-        "input_label": "Answer",
-        "choices": plan.get("choices") or [],
-        "image_url": "",
-        "image_status": "none",
-        "requires_input": True,
-    }
-    _emit_user_prompt(session, message, detail)
-
-
-def _emit_plan_confirmation_prompt(session: HasturTaskSession, plan: dict[str, Any]) -> None:
-    message = "Review the plan in the chat. Confirm to generate and run one complete Hastur script, or send changes."
-    session.pending = "plan_confirmation"
-    detail = {
-        "title": "Confirmation required",
-        "body": message,
-        "input_label": "Request changes",
-        "choices": [
-            {"id": "confirm_plan", "label": "Confirm", "description": "Generate and run one complete Hastur script.", "action": "confirm"},
-            {"id": "request_changes", "label": "Revise", "description": "Use the feedback below to revise the plan.", "action": "revise"},
-        ],
-        "image_url": "",
-        "image_status": "none",
-        "requires_input": True,
-    }
-    _emit_user_prompt(session, message, detail)
-
-
-def _emit_post_execution_prompt(session: HasturTaskSession, prompt: dict[str, Any], checkpoint: dict[str, Any]) -> None:
-    session.pending = "post_execution_review"
-    image_status = str(checkpoint.get("image_status") or prompt.get("image_status") or "none")
-    image_url = str(checkpoint.get("image_url") or prompt.get("image_url") or "") if image_status == "available" else ""
-    message = str(prompt.get("body") or "Review the result and choose whether to continue modifying it.")
-    detail = {
-        "title": str(prompt.get("title") or "Review result"),
-        "body": message,
-        "input_label": str(prompt.get("input_label") or "Modification request"),
-        "choices": prompt.get("choices") or [],
-        "image_url": image_url,
-        "image_status": image_status,
-        "image_error": str(checkpoint.get("image_error") or prompt.get("image_error") or ""),
-        "requires_input": True,
-    }
-    _emit_user_prompt(session, message, detail, state="awaiting_user")
 
 
 def _emit_user_prompt(session: HasturTaskSession, message: str, detail: dict[str, Any], state: str = "awaiting_user") -> None:
@@ -1213,8 +1653,60 @@ def _emit(session: HasturTaskSession, event_type: str, state: str, message: str,
 
 
 def _emit_activity(session: HasturTaskSession, event_type: str, state: str, message: str, detail: Any | None = None) -> None:
-    suffix = "" if str(message).endswith(("\n", "\r")) else "\n"
-    _emit_thought_delta(session, f"{message}{suffix}", state=state, kind=event_type, detail=detail)
+    session.state = state if state in TASK_STATES else session.state
+    if event_type in {"execution", "repair", "repair_result", "execution_result"}:
+        _emit_task_progress(session, message="Working on the current task.")
+
+
+def _emit_task_breakdown(session: HasturTaskSession, plan: dict[str, Any]) -> None:
+    tasks = plan.get("task_breakdown") if isinstance(plan.get("task_breakdown"), list) else []
+    if not tasks:
+        return
+    detail = _task_progress_detail(plan)
+    _emit(session, "task_breakdown", session.state, "Task list ready.", detail)
+
+
+def _emit_task_progress(session: HasturTaskSession, message: str = "Task progress updated.") -> None:
+    if not session.plan:
+        return
+    detail = _task_progress_detail(session.plan)
+    _emit(session, "task_progress", session.state, message, detail)
+
+
+def _task_progress_detail(plan: dict[str, Any]) -> dict[str, Any]:
+    tasks = [_public_task(task) for task in plan.get("task_breakdown") or []]
+    current = next((task["id"] for task in tasks if task.get("status") == "active"), "")
+    return {
+        "complexity": plan.get("complexity", "simple"),
+        "execution_strategy": plan.get("execution_strategy", "single_batch"),
+        "current_task_id": current,
+        "tasks": tasks,
+    }
+
+
+def _set_task_status(session: HasturTaskSession, task_id: str, status: str, state: str, message: str) -> None:
+    if not session.plan:
+        return
+    tasks = session.plan.get("task_breakdown") if isinstance(session.plan.get("task_breakdown"), list) else []
+    if not tasks:
+        return
+    session.current_task_id = task_id if status == "active" else session.current_task_id
+    for task in tasks:
+        if task.get("id") == task_id:
+            task["status"] = status
+        elif status == "active" and task.get("status") == "active":
+            task["status"] = "pending"
+    session.state = state if state in TASK_STATES else session.state
+    _emit_task_progress(session, message=message)
+
+
+def _complete_all_tasks(session: HasturTaskSession, status: str = "completed") -> None:
+    if not session.plan:
+        return
+    for task in session.plan.get("task_breakdown") or []:
+        if task.get("status") not in {"completed", "failed"}:
+            task["status"] = status
+    _emit_task_progress(session, message="Task progress updated.")
 
 
 def _emit_assistant_delta(session: HasturTaskSession, text: str) -> None:
@@ -1230,9 +1722,31 @@ def _emit_thought_delta(
     kind: str = "work",
     detail: Any | None = None,
 ) -> None:
+    text = _sanitize_public_thought(text)
     if not text:
         return
     _emit(session, "thought_delta", state or session.state, text, {"delta": text, "kind": kind, "detail": detail or {}})
+
+
+def _sanitize_public_thought(text: str) -> str:
+    if not text:
+        return ""
+    stripped = text.strip()
+    lower = stripped.lower()
+    if not stripped:
+        return ""
+    if "```" in stripped or "<tool" in lower or "</tool" in lower:
+        return ""
+    if _looks_like_gdscript(stripped):
+        return ""
+    if re.search(r"(?m)^\s*(extends|@tool|class_name|func|var|const|if|for|while)\b", stripped):
+        return ""
+    if "executecontext" in lower or "editorinterface" in lower or "projectsettings" in lower:
+        return ""
+    json_markers = ['"code"', '"steps"', '"context_requests"', '"user_prompt"', '"mode"', '"choices"', '"broker_response"']
+    if stripped.startswith(("{", "[")) or any(marker in lower for marker in json_markers):
+        return ""
+    return text
 
 
 def _raise_if_cancelled(session: HasturTaskSession) -> None:
@@ -1265,9 +1779,209 @@ def _result_error_context(result: dict[str, Any]) -> dict[str, Any]:
     return {
         "success": result.get("success"),
         "message": result.get("message"),
-        "broker_response": result.get("broker_response"),
+        "broker_response": _compact_broker_response(result.get("broker_response")),
         "gdscript_excerpt": str(result.get("gdscript") or "")[:4000],
+        "output_contract": result.get("output_contract"),
     }
+
+
+def _compact_broker_response(value: Any) -> dict[str, Any]:
+    outputs = _extract_output_pairs(value)
+    return {
+        "outputs": [(key, _clip_text(text, 1200)) for key, text in outputs[:6]],
+        "errors": _clip_text(_broker_error_text(value), 1600),
+    }
+
+
+def _compact_execution_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    compact: list[dict[str, Any]] = []
+    for result in results:
+        outputs = _extract_output_pairs(result.get("broker_response"))
+        compact.append(
+            {
+                "success": result.get("success"),
+                "message": _clip_text(str(result.get("message") or ""), 900),
+                "outputs": [(key, _clip_text(value, 1200)) for key, value in outputs[:6]],
+                "output_contract": result.get("output_contract"),
+                "broker_error": _clip_text(_broker_error_text(result.get("broker_response")), 1200),
+                "gdscript_excerpt": _clip_text(str(result.get("gdscript") or ""), 2200),
+            }
+        )
+    return compact
+
+
+def _broker_error_text(value: Any) -> str:
+    if isinstance(value, dict):
+        pieces = []
+        for key in ("error", "message", "stderr", "exception"):
+            if value.get(key):
+                pieces.append(str(value.get(key)))
+        for nested in value.values():
+            nested_text = _broker_error_text(nested)
+            if nested_text:
+                pieces.append(nested_text)
+        return "\n".join(dict.fromkeys(pieces))
+    if isinstance(value, list):
+        return "\n".join(filter(None, (_broker_error_text(item) for item in value)))
+    return ""
+
+
+def _clip_text(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "\n...[clipped]"
+
+
+def _missing_output_contract_result(
+    session: HasturTaskSession,
+    plan: dict[str, Any],
+    result: dict[str, Any],
+) -> dict[str, Any] | None:
+    output_text = _result_displayable_text(result)
+    if output_text and (not _requires_before_after_evidence(session, plan) or _has_before_after_evidence(output_text)):
+        return None
+    if output_text:
+        reason = "The task returned output but did not include required before/after evidence for the target node or resource."
+    else:
+        reason = "The task completed through Hastur but returned no non-empty executeContext.output entries."
+    return {
+        "success": False,
+        "message": _missing_output_message(session, plan),
+        "broker_response": result.get("broker_response"),
+        "gdscript": result.get("gdscript"),
+        "output_contract": {
+            "required": True,
+            "before_after_required": _requires_before_after_evidence(session, plan),
+            "reason": reason,
+            "original_success": bool(result.get("success")),
+            "original_message": str(result.get("message") or ""),
+        },
+    }
+
+
+def _result_has_displayable_output(result: dict[str, Any]) -> bool:
+    return bool(_result_displayable_text(result))
+
+
+def _result_displayable_text(result: dict[str, Any]) -> str:
+    return "\n".join(value.strip() for _, value in _extract_output_pairs(result.get("broker_response")) if value and value.strip())
+
+
+def _missing_output_message(session: HasturTaskSession, plan: dict[str, Any]) -> str:
+    if _requires_before_after_evidence(session, plan):
+        label = "before/after evidence"
+    else:
+        label = "scene tree" if _is_scene_tree_request(session, plan) else "task result"
+    return (
+        f"Hastur ran the batch, but it did not return a displayable {label}. "
+        'The batch must call executeContext.output("result", text) with the real result, so I did not fabricate an answer.'
+    )
+
+
+def _is_scene_tree_request(session: HasturTaskSession, plan: dict[str, Any]) -> bool:
+    text = " ".join(
+        [
+            session.instruction,
+            str(plan.get("summary") or ""),
+            " ".join(
+                f"{step.get('title') or ''} {step.get('goal') or ''}"
+                for step in plan.get("steps") or []
+            ),
+        ]
+    ).lower()
+    return any(term in text for term in ["scene tree", "node tree", "\u573a\u666f\u6811", "\u8282\u70b9\u6811"])
+
+
+def _requires_before_after_evidence(session: HasturTaskSession, plan: dict[str, Any]) -> bool:
+    if _is_read_only_plan(session, plan):
+        return False
+    text = " ".join(
+        [
+            session.instruction,
+            str(plan.get("summary") or ""),
+            " ".join(
+                f"{step.get('title') or ''} {step.get('goal') or ''}"
+                for step in plan.get("steps") or []
+            ),
+        ]
+    ).lower()
+    direct_issue_terms = [
+        "flip",
+        "flipped",
+        "upside down",
+        "upside-down",
+        "inverted",
+        "reverse",
+        "reversed",
+        "orientation",
+        "direction",
+        "rotate",
+        "rotated",
+        "vertical",
+        "front",
+        "back",
+        "backface",
+        "transparent",
+        "normal",
+        "normals",
+        "cull",
+        "culling",
+        "winding",
+        "\u4e0a\u4e0b",
+        "\u98a0\u5012",
+        "\u7ffb\u8f6c",
+        "\u65b9\u5411",
+        "\u6b63\u9762",
+        "\u53cd\u9762",
+        "\u80cc\u9762",
+        "\u900f\u660e",
+        "\u6cd5\u7ebf",
+    ]
+    resource_terms = [
+        "material",
+        "mesh",
+        "surface",
+        "terrain",
+        "continent",
+        "landmass",
+        "map",
+        "\u5927\u9646",
+        "\u5730\u56fe",
+        "\u8d34\u56fe",
+        "\u6750\u8d28",
+        "\u7f51\u683c",
+    ]
+    problem_terms = [
+        "fix",
+        "repair",
+        "correct",
+        "issue",
+        "problem",
+        "wrong",
+        "not visible",
+        "missing",
+        "transparent",
+        "front",
+        "back",
+        "\u4fee\u6b63",
+        "\u4fee\u590d",
+        "\u95ee\u9898",
+        "\u4e0d\u5bf9",
+        "\u9519",
+        "\u900f\u660e",
+        "\u6b63\u9762",
+        "\u80cc\u9762",
+    ]
+    return any(term in text for term in direct_issue_terms) or (
+        any(term in text for term in resource_terms) and any(term in text for term in problem_terms)
+    )
+
+
+def _has_before_after_evidence(text: str) -> bool:
+    lower = text.lower()
+    before_terms = ["before:", "before =", "before=", "old:", "previous:", "\u4fee\u6539\u524d", "\u4fee\u590d\u524d", "\u539f\u59cb", "\u4e4b\u524d", "\u5f53\u524d"]
+    after_terms = ["after:", "after =", "after=", "new:", "updated:", "\u4fee\u6539\u540e", "\u4fee\u590d\u540e", "\u4e4b\u540e", "\u5b8c\u6210\u540e"]
+    return any(term in lower for term in before_terms) and any(term in lower for term in after_terms)
 
 
 def _final_task_response(session: HasturTaskSession, plan: dict[str, Any]) -> str:
@@ -1280,14 +1994,10 @@ def _final_task_response(session: HasturTaskSession, plan: dict[str, Any]) -> st
             return cleaned_outputs[0][1][:12000]
         return "\n\n".join(f"{key}:\n{value[:12000]}" for key, value in cleaned_outputs)
 
-    successful_messages = [
-        str(result.get("message") or "").strip()
-        for result in session.prior_results
-        if result.get("success") and str(result.get("message") or "").strip()
-    ]
-    if successful_messages:
-        return "Task completed.\n" + "\n".join(f"- {message}" for message in successful_messages[-5:])
-    return str(plan.get("final") or "Task completed. Review local Git changes manually from the Git workbench.")
+    final = str(plan.get("final") or "").strip()
+    if final:
+        return final[:12000]
+    return _missing_output_message(session, plan)
 
 
 def _finish(session: HasturTaskSession) -> None:

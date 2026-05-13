@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Any
 
@@ -53,6 +53,7 @@ class HasturChatRequest(BaseModel):
 class HasturTaskRequest(BaseModel):
     instruction: str
     skill_name: str | None = None
+    workflow_mode: str = "auto"
     confirmed: bool = False
     attachments: list[UploadedImage] = []
 
@@ -135,6 +136,7 @@ def create_hastur_task(project_slug: str, payload: HasturTaskRequest):
             skill_name=payload.skill_name,
             attachments=[attachment.model_dump() for attachment in payload.attachments],
             confirmed=payload.confirmed,
+            workflow_mode=payload.workflow_mode,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -162,21 +164,6 @@ def resume_hastur_task(project_slug: str, task_id: str, payload: HasturTaskResum
 def cancel_hastur_task(project_slug: str, task_id: str):
     try:
         return cancel_task(task_id)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@router.get("/api/projects/{project_slug}/visual-checkpoints/{filename}")
-def get_visual_checkpoint(project_slug: str, filename: str):
-    if "/" in filename or "\\" in filename or filename.startswith("."):
-        raise HTTPException(status_code=400, detail="invalid checkpoint filename")
-    try:
-        from app.services.asset_service import get_project_dir
-
-        path = get_project_dir(project_slug) / "assets" / "generated" / "visual_checkpoints" / filename
-        if not path.exists() or not path.is_file() or path.stat().st_size <= 0:
-            raise FileNotFoundError(f"Visual checkpoint not found: {filename}")
-        return FileResponse(path, media_type="image/png")
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

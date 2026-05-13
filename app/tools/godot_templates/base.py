@@ -94,6 +94,19 @@ def create_minimal_main_scene(project_dir: Path) -> Path:
     )
 
 
+def write_godot_project_notes(project_dir: Path, engine: str, broker_host: str, broker_port: int) -> Path:
+    notes = f"""# Godot Project
+
+- Engine target: {engine}
+- Main scene: `res://scenes/Main.tscn`
+- Hastur addon: `res://addons/hasturoperationgd/plugin.cfg`
+- Hastur broker TCP target: `{broker_host}:{broker_port}`
+
+The Hastur editor plugin is enabled in `project.godot`. Start the broker from the AI Game Development Agent dashboard before opening or reloading the project in Godot.
+"""
+    return write_text(project_dir / "docs" / "GODOT_PROJECT.md", notes)
+
+
 def install_hastur_addon(project_dir: Path) -> list[Path]:
     if not HASTUR_ADDON_DIR.exists():
         raise FileNotFoundError(f"Hastur addon not found: {HASTUR_ADDON_DIR}")

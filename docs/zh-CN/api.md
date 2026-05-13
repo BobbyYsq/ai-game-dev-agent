@@ -45,11 +45,11 @@ Codex-like 任务接口：
 
 SSE 中，公开工作流思考通过 `thought_delta` 流式返回；用户可见计划/结果正文通过 `assistant_delta` 流式返回；需要用户输入时只使用统一的 `user_prompt`；结束状态使用 `final` 或 `error`。前端应把 `thought_delta` 和 `assistant_delta` 渲染在同一个 assistant 气泡中，不再依赖 `plan_review`、`choice_request` 或 `visual_checkpoint` 专用事件。
 
-`user_prompt.detail` 是通用弹窗载荷，字段固定为 `title`、`body`、`choices`、`input_label`、`image_url`、`image_status`、`requires_input`。详细计划只出现在聊天正文中，弹窗只负责确认、选择、视觉检查或修改意见。
+`user_prompt.detail` 是通用弹窗载荷，字段固定为 `title`、`body`、`choices`、`input_label`、`requires_input`。详细计划只出现在聊天正文中，弹窗只负责确认、选择或修改意见。
 
 确认后的修改型任务会生成一个完整的 Hastur editor batch。编译或运行失败时，后端把完整 broker payload、失败代码摘要和当前目标发回 LLM，让 LLM 继续生成完整修复 batch，直到成功、用户取消或 provider/broker/executor 不可恢复失败。
 
-视觉 checkpoint 文件只有在后端确认 PNG 存在且非空后，才会通过 `GET /api/projects/{project_slug}/visual-checkpoints/{filename}` 暴露。
+任务流不再生成截图 review/checkpoint 弹窗；视觉判断来自用户上传图片的 LLM 摘要或 Hastur 返回的文本证据。
 
 ## Git
 

@@ -51,11 +51,13 @@ Godot editor plugins live under `addons/` and are enabled through `Project > Pro
 3. Click **Executors** to confirm a Godot executor is available.
 4. Open **LLM + Hastur**.
 5. Select the project.
-6. Type `/` in the composer and choose a vendored Hastur skill.
-7. Attach reference files or images with the `+` button if needed.
-8. Send the request. The chat streams public thinking and the detailed plan in the assistant bubble. Confirmed mutating plans run as one complete Hastur batch; failures are repaired as whole batches until success, cancellation, or an unrecoverable broker/provider problem.
+6. Optional: in **Manage > Skills**, upload a global skill or select a project and upload a project-specific skill. Vendored Hastur skills remain read-only.
+7. Type `/` in the composer and choose an available skill.
+8. Attach reference files or images with the `+` button if needed.
+9. Use **Send** for automatic direct/plan/ask decisions, or **Plan** to force planning first. The Plan flow requires the LLM to create the confirmation modal before any script generation or Hastur execution.
+10. The chat streams LLM public thinking and assistant text in one bubble. Approved plans and direct actions run as one complete Hastur batch; failures are repaired as whole batches until success, cancellation, or an unrecoverable broker/provider problem.
 
-The UI never asks for raw GDScript. The LLM receives vendored skill instructions and the app injects broker URL/token privately.
+The UI never asks for raw GDScript. The LLM receives a lightweight capability registry, skill metadata, and a Godot docs index by default; full skill bodies or docs snippets are loaded only when explicitly selected or requested by the LLM. Broker URL/token state is bound privately.
 
 ## 5. Generate and review images
 
@@ -75,6 +77,6 @@ The UI never asks for raw GDScript. The LLM receives vendored skill instructions
 3. Click **Review changes** to inspect status, changed files, and diff.
 4. Click **Commit**, enter a message, and commit all project changes.
 5. Click **History** to inspect recent commits.
-6. Click **Restore**, preview a commit hash, then confirm only after checking the preview.
+6. Click **Restore here** on a history entry, review the target summary, then click **Confirm restore** to create a safe restore commit.
 
 This is local-only Git management. Remote push and pull request workflows are intentionally out of scope for this version.

@@ -10,6 +10,7 @@ from app.config import GENERATED_PROJECTS_DIR
 from app.models.llm_provider import get_llm_provider
 from app.services.git_service import commit_all, init_repo
 from app.services.settings_service import load_private_settings
+from app.tools.godot_templates.base import write_godot_project_notes
 
 @dataclass
 class CreateProjectResult:
@@ -44,7 +45,9 @@ def create_ai_game_project(request) -> CreateProjectResult:
         broker_host = str(settings.get("hastur_broker_host", "localhost"))
         broker_port = int(settings.get("hastur_broker_tcp_port", 5301))
         for fp in generate_godot_project(pdir, request.project_name, request.game_type, request.project_template, broker_host, broker_port):
-            generated.append(str(fp.relative_to(pdir)))
+            generated.append(fp.relative_to(pdir).as_posix())
+        notes_path = write_godot_project_notes(pdir, request.engine, broker_host, broker_port)
+        generated.append(notes_path.relative_to(pdir).as_posix())
     review = generate_review_report(request.project_name, generated, llm)
     docs_dir.mkdir(parents=True, exist_ok=True)
     (docs_dir/"REVIEW_REPORT.md").write_text(review, encoding='utf-8')

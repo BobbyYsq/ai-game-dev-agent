@@ -1,4 +1,6 @@
-from app.services import godot_project_service
+from types import SimpleNamespace
+
+from app.services import godot_project_service, project_service
 
 
 def test_create_godot_project_installs_and_enables_hastur(tmp_path, monkeypatch):
@@ -27,6 +29,7 @@ def test_create_godot_project_installs_and_enables_hastur(tmp_path, monkeypatch)
     assert (project / "licenses/HASTUR_OPERATION_PLUGIN_LICENSE.md").exists()
     assert (project / ".gitignore").exists()
     assert (project / ".gitattributes").exists()
+    assert (project / "docs/GODOT_PROJECT.md").exists()
 
 
 def test_create_godot_project_initializes_git_by_default(tmp_path, monkeypatch):
@@ -68,3 +71,30 @@ def test_create_godot_project_handles_existing_clean_project(tmp_path, monkeypat
     assert result.success is True
     assert result.git["committed"] is False
     assert "no new changes" in result.message.lower()
+
+
+def test_legacy_project_creation_writes_godot_project_notes(tmp_path, monkeypatch):
+    root = tmp_path / "generated"
+    monkeypatch.setattr(project_service, "GENERATED_PROJECTS_DIR", root)
+    monkeypatch.setattr(project_service, "load_private_settings", lambda: {"hastur_broker_host": "localhost", "hastur_broker_tcp_port": 5301})
+    monkeypatch.setattr(project_service, "get_llm_provider", lambda: object())
+    monkeypatch.setattr(project_service, "generate_review_report", lambda *_args, **_kwargs: "Review")
+
+    request = SimpleNamespace(
+        project_name="Legacy Garden",
+        game_idea="A tiny garden prototype",
+        game_type="2D top-down action",
+        project_template="2d",
+        engine="Godot 4",
+        prototype_scope="one room",
+        generate_docs=False,
+        generate_godot_skeleton=True,
+        enable_git=False,
+    )
+
+    result = project_service.create_ai_game_project(request)
+    project = root / "legacy-garden"
+
+    assert result.success is True
+    assert (project / "docs/GODOT_PROJECT.md").exists()
+    assert "docs/GODOT_PROJECT.md" in result.generated_files
