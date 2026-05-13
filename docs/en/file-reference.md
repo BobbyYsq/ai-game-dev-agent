@@ -12,20 +12,21 @@
 - `app/api/routes_settings.py`: public settings, save settings, test LLM.
 - `app/api/routes_godot_projects.py`: blank Godot project creation.
 - `app/api/routes_projects.py`: generated project listing and details.
-- `app/api/routes_hastur.py`: broker controls, skills, executors, chat, and structured operations.
+- `app/api/routes_hastur.py`: broker controls, skills, executors, chat, task streaming/resume/cancel, and structured operations.
 - `app/api/routes_assets.py`: image generation, asset files, GDD attach, Blender reference.
-- `app/api/routes_git.py`: project-local Git status, changed files, diff, log, selected-file commit/discard, revert, restore-file, and deprecated rollback.
+- `app/api/routes_git.py`: project-local Git status, branch/save/merge actions, changed files, diff, log, selected-file compatibility APIs, revert, restore-file, and safe rollback.
 
 ## Services
 
 - `app/services/settings_service.py`: local private settings, provider inference, public settings.
 - `app/services/godot_project_service.py`: blank Hastur-enabled Godot project creation.
 - `app/services/hastur_chat_service.py`: LLM + Hastur chat prompt, attachments, confirmation, execution.
+- `app/services/hastur_task_service.py`: streaming LLM + Hastur task loop, public thought deltas, assistant body deltas, generic prompts, whole-batch generation and repair, cancellation, verified visual checkpoints, and final output extraction.
 - `app/services/hastur_skill_service.py`: vendored Hastur skill discovery.
 - `app/services/hastur_service.py`: safe structured operation validation and broker execution.
 - `app/services/broker_service.py`: managed local Hastur broker process.
 - `app/services/asset_service.py`: generated images, manifests, GDD links, Blender notes.
-- `app/services/git_service.py`: generated-project safe Git helper commands; hard reset rollback is disabled.
+- `app/services/git_service.py`: generated-project safe Git helper commands, Godot VCS metadata, friendly change status fields, and local-change-preserving branch creation; hard reset rollback is disabled.
 
 ## Provider Adapters
 
@@ -44,5 +45,6 @@
 - `tests/test_settings.py`: provider inference and public settings.
 - `tests/test_assets.py`: generated asset manifest and document links.
 - `tests/test_hastur.py`: structured operation validation and GDScript construction.
+- `tests/test_hastur_task_service.py`: streaming task events, generic prompts, whole-batch repair loop, visual checkpoints, and final output extraction.
 - `tests/test_hastur_skills.py`: skill discovery and token hiding in chat.
-- `tests/test_git_service.py`: local Git status, selected-file commit/discard, revert, restore-file, and disabled rollback.
+- `tests/test_git_service.py`: local Git status, friendly change metadata, branch/save/merge/delete flows, selected-file commit/discard, revert, restore-file, and disabled rollback.

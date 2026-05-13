@@ -121,8 +121,25 @@ Codex-like task streaming:
 - `POST /api/projects/{project_slug}/hastur/tasks`
 - `GET /api/projects/{project_slug}/hastur/tasks/{task_id}/events`
 - `POST /api/projects/{project_slug}/hastur/tasks/{task_id}/resume`
+- `POST /api/projects/{project_slug}/hastur/tasks/{task_id}/cancel`
 
-Task events use server-sent events. Event types include `assistant_delta`, `activity`, `context`, `plan_review`, `choice_request`, `skill_confirmation`, `visual_checkpoint`, `step_result`, `question`, `verification`, `final`, and `error`. `question` is kept for compatibility; new clients should render the more specific modal events.
+Task events use server-sent events. Public workflow notes stream through `thought_delta`; user-facing plan/result text streams through `assistant_delta`; prompts use the single generic `user_prompt`; terminal states use `final` and `error`. The frontend should render `thought_delta` and `assistant_delta` in the same assistant bubble and should not expect `plan_review`, `choice_request`, or `visual_checkpoint` event types.
+
+`user_prompt.detail` is a generic modal payload:
+
+```json
+{
+  "title": "Review result",
+  "body": "Choose finish, or describe what to adjust next.",
+  "choices": [{"id": "finish", "label": "Finish", "action": "finish"}],
+  "input_label": "Modification request",
+  "image_url": "/api/projects/demo/visual-checkpoints/checkpoint.png",
+  "image_status": "available",
+  "requires_input": true
+}
+```
+
+Confirmed mutating plans generate one complete Hastur editor batch. Compile/runtime failures feed the complete broker payload, failed code excerpt, and current goal back to the LLM for whole-batch repair until success, cancellation, or an unrecoverable provider/broker/executor failure.
 
 `resume` accepts:
 
@@ -135,7 +152,7 @@ Task events use server-sent events. Event types include `assistant_delta`, `acti
 }
 ```
 
-Visual checkpoints are served from:
+Visual checkpoints are served from the endpoint below only after the backend has verified that the PNG exists and is non-empty:
 
 - `GET /api/projects/{project_slug}/visual-checkpoints/{filename}`
 
@@ -146,10 +163,16 @@ Visual checkpoints are served from:
 - `GET /api/projects/{project_slug}/git/diff`
 - `GET /api/projects/{project_slug}/git/changes`
 - `GET /api/projects/{project_slug}/git/log`
+- `GET /api/projects/{project_slug}/git/branches`
 - `POST /api/projects/{project_slug}/git/commit`
+- `POST /api/projects/{project_slug}/git/save`
+- `POST /api/projects/{project_slug}/git/branches`
+- `POST /api/projects/{project_slug}/git/branches/switch`
+- `DELETE /api/projects/{project_slug}/git/branches/{branch_name}`
+- `POST /api/projects/{project_slug}/git/merge-to-main`
 - `POST /api/projects/{project_slug}/git/discard`
 - `POST /api/projects/{project_slug}/git/revert`
 - `POST /api/projects/{project_slug}/git/restore-file`
 - `POST /api/projects/{project_slug}/git/rollback`
 
-`commit` accepts an optional `paths` list and only stages/commits those selected files when provided. `rollback` is deprecated and returns a safe error instead of running `git reset --hard`; use discard selected files, revert commit, or restore selected files from a commit.
+`status` and `changes` include friendly file metadata: `status_kind`, `display_status`, `directory`, and `filename`. New branch creation preserves local uncommitted changes. Branch switching lets Git proceed only when it can do so without overwriting local work. `commit` accepts an optional `paths` list and only stages/commits those selected files when provided.

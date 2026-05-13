@@ -20,9 +20,9 @@ Browser dashboard
 - `app/api/routes_git.py` exposes project-local Git status, changed files, file diffs, selected-file commit/discard, history, revert, and restore-file actions.
 - `app/services/settings_service.py` stores private settings locally and hides secrets from public responses.
 - `app/services/hastur_chat_service.py` builds the skill-grounded LLM prompt, includes uploaded context, and executes safe Hastur code when allowed.
-- `app/services/hastur_task_service.py` runs the Codex-like Hastur task loop: stream real assistant deltas, load Godot docs and skill, build hidden atomic plans, pause for plan/choice/skill/visual confirmations, generate one Hastur snippet per step, repair failed steps, and verify broker state.
+- `app/services/hastur_task_service.py` runs the Codex-like Hastur task loop: stream public workflow thoughts and assistant body text into one chat bubble, load Godot docs and skill context, build hidden plans, pause through one generic prompt modal, generate one complete Hastur editor batch per confirmed plan or adjustment, keep repairing failed batches with full Hastur error context until success/cancel/unrecoverable failure, return final answers from execution outputs, verify broker state, and verify checkpoint PNGs before exposing image URLs.
 - `app/services/asset_service.py` writes image files, manifests, GDD references, and Blender reference notes.
-- `app/services/git_service.py` wraps generated-project-scoped safe Git commands. Hard reset rollback is disabled; users must commit, discard selected files, revert commits, or restore selected files explicitly.
+- `app/services/git_service.py` wraps generated-project-scoped safe Git commands with Godot VCS metadata, friendly changed-file status fields, local-change-preserving branch creation, and guarded branch switching. Hard reset rollback is disabled; users must save, discard selected files, revert commits, or restore selected files explicitly.
 
 ## Provider Model
 

@@ -5,7 +5,7 @@ from typing import Any
 
 from app.services.broker_service import broker_logs, broker_status, start_broker, stop_broker
 from app.services.hastur_chat_service import chat_with_hastur_skill
-from app.services.hastur_task_service import create_task, resume_task, stream_task_events
+from app.services.hastur_task_service import cancel_task, create_task, resume_task, stream_task_events
 from app.services.hastur_service import GodotOperation, apply_hastur_operation, hastur_executors, hastur_status
 from app.services.hastur_skill_service import list_hastur_skills
 from app.services.godot_operation_service import execute_godot_operation_plan, plan_godot_operations
@@ -158,6 +158,14 @@ def resume_hastur_task(project_slug: str, task_id: str, payload: HasturTaskResum
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.post("/api/projects/{project_slug}/hastur/tasks/{task_id}/cancel")
+def cancel_hastur_task(project_slug: str, task_id: str):
+    try:
+        return cancel_task(task_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.get("/api/projects/{project_slug}/visual-checkpoints/{filename}")
 def get_visual_checkpoint(project_slug: str, filename: str):
     if "/" in filename or "\\" in filename or filename.startswith("."):
@@ -166,9 +174,9 @@ def get_visual_checkpoint(project_slug: str, filename: str):
         from app.services.asset_service import get_project_dir
 
         path = get_project_dir(project_slug) / "assets" / "generated" / "visual_checkpoints" / filename
-        if not path.exists():
+        if not path.exists() or not path.is_file() or path.stat().st_size <= 0:
             raise FileNotFoundError(f"Visual checkpoint not found: {filename}")
-        return FileResponse(path)
+        return FileResponse(path, media_type="image/png")
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

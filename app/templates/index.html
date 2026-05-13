@@ -130,6 +130,7 @@
                 <button type="button" class="icon-button" onclick="triggerChatFiles()" title="Attach files" aria-label="Attach files">+</button>
                 <textarea id="chat_instruction" rows="2" data-i18n-placeholder="chat_placeholder" placeholder="/godot-remote-executor Add a Label node to Main.tscn and save the scene."></textarea>
                 <button type="button" id="chat_send_button" onclick="sendHasturChat()" data-i18n="send_to_llm">Send</button>
+                <button type="button" id="chat_stop_button" class="secondary hidden" onclick="cancelActiveTask()" data-i18n="stop_task">Stop</button>
                 <input id="chat_files" type="file" class="visually-hidden" multiple>
               </div>
               <p id="chatMessage" class="message" role="status"></p>

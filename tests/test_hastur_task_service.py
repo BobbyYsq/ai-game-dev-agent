@@ -30,9 +30,12 @@ def test_hastur_task_streams_real_llm_delta_without_hardcoded_intro(tmp_path, mo
         def generate_text(self, prompt, system_prompt=None):
             assert "Use this skill before Godot actions." in prompt
             assert "Nodes and Scenes" in prompt
+            if "Generate ONE complete GDScript" in prompt:
+                return json.dumps({"code": 'executeContext.output("result", "Scene inspected")'})
             return json.dumps(
                 {
                     "summary": "Plan ready",
+                    "read_only": True,
                     "requires_user_approval": False,
                     "steps": [{"title": "Inspect", "goal": "Inspect the scene", "needs_visual_check": False}],
                     "final": "Done",
@@ -40,6 +43,16 @@ def test_hastur_task_streams_real_llm_delta_without_hardcoded_intro(tmp_path, mo
             )
 
     monkeypatch.setattr(hastur_task_service, "get_llm_provider", lambda: FakeLLM())
+    monkeypatch.setattr(
+        hastur_task_service,
+        "apply_hastur_code",
+        lambda _slug, code, **_kwargs: HasturExecuteResult(
+            success=True,
+            message="ok",
+            gdscript=code,
+            broker_response={"data": {"outputs": [["result", "Scene inspected"]]}},
+        ),
+    )
 
     task = hastur_task_service.create_task("shadow-garden", "inspect scene", "godot-remote-executor")
     joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
@@ -47,14 +60,14 @@ def test_hastur_task_streams_real_llm_delta_without_hardcoded_intro(tmp_path, mo
     assert "Planning live " in joined
     assert "from the model." in joined
     assert "event: thought_delta" in joined
-    assert "event: assistant_delta" not in joined
+    assert "event: assistant_delta" in joined
     assert "event: final" in joined
     assert "event: user_prompt" not in joined
     assert "event: git" not in joined
     assert "我会先读取" not in joined
 
 
-def test_complex_task_runs_without_prompt_when_llm_does_not_need_input(tmp_path, monkeypatch):
+def test_complex_task_prompts_for_plan_confirmation_without_running_first(tmp_path, monkeypatch):
     _setup_project(tmp_path, monkeypatch)
     applied = []
 
@@ -81,13 +94,13 @@ def test_complex_task_runs_without_prompt_when_llm_does_not_need_input(tmp_path,
     task = hastur_task_service.create_task("shadow-garden", "build a village and add sunny post-processing", "godot-remote-executor")
     joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
 
-    assert "event: user_prompt" not in joined
+    assert "event: user_prompt" in joined
     assert "event: plan_review" not in joined
-    assert "event: final" in joined
+    assert "event: final" not in joined
     assert applied == []
 
 
-def test_confirmed_plan_generates_code_one_step_at_a_time(tmp_path, monkeypatch):
+def test_confirmed_plan_generates_one_complete_batch(tmp_path, monkeypatch):
     _setup_project(tmp_path, monkeypatch)
     code_prompts = []
     executed = []
@@ -109,9 +122,10 @@ def test_confirmed_plan_generates_code_one_step_at_a_time(tmp_path, monkeypatch)
                         "final": "Done",
                     }
                 )
-            assert "Generate the smallest safe GDScript snippet" in prompt
+            assert "Generate ONE complete GDScript snippet" in prompt
+            assert "entire confirmed plan in one run" in prompt
             code_prompts.append(prompt)
-            return json.dumps({"code": f'executeContext.output("step", "{len(code_prompts)}")'})
+            return json.dumps({"code": 'executeContext.output("batch", "done")'})
 
     def fake_apply(_slug, code, **_kwargs):
         executed.append(code)
@@ -120,14 +134,14 @@ def test_confirmed_plan_generates_code_one_step_at_a_time(tmp_path, monkeypatch)
     monkeypatch.setattr(hastur_task_service, "get_llm_provider", lambda: FakeLLM())
     monkeypatch.setattr(hastur_task_service, "apply_hastur_code", fake_apply)
 
-    task = hastur_task_service.create_task("shadow-garden", "build a village and wall", "godot-remote-executor")
+    task = hastur_task_service.create_task("shadow-garden", "build a village and wall", "godot-remote-executor", confirmed=True)
     joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
 
-    assert len(code_prompts) == 2
-    assert len(executed) == 2
-    assert "event: user_prompt" not in joined
-    assert "event: step_result" in joined
-    assert "event: final" in joined
+    assert len(code_prompts) == 1
+    assert len(executed) == 1
+    assert "event: user_prompt" in joined
+    assert "event: step_result" not in joined
+    assert "event: final" not in joined
 
 
 def test_llm_user_prompt_uses_unified_prompt_event(tmp_path, monkeypatch):
@@ -175,8 +189,8 @@ def test_hastur_task_repairs_failed_step_code(tmp_path, monkeypatch):
 
         def generate_text(self, prompt, system_prompt=None):
             if "Do not write GDScript in this planning response" in prompt:
-                return '{"summary":"Plan","steps":[{"title":"Create","goal":"Create terrain"}],"final":"Done"}'
-            if "previous GDScript failed" in prompt:
+                return '{"summary":"Plan","read_only":true,"steps":[{"title":"Create","goal":"Create terrain"}],"final":"Done"}'
+            if "previous complete Hastur GDScript batch failed" in prompt:
                 self.repair = True
                 assert "Mixed use of tabs and spaces" in prompt
                 return '{"code":"if true:\\n\\tprint(\\"fixed\\")"}'
@@ -193,9 +207,79 @@ def test_hastur_task_repairs_failed_step_code(tmp_path, monkeypatch):
     task = hastur_task_service.create_task("shadow-garden", "make land", "godot-remote-executor", confirmed=True)
     joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
 
-    assert "event: repair" in joined
+    assert "Repairing complete Hastur script" in joined
+    assert "event: thought_delta" in joined
     assert "event: final" in joined
     assert "could not be repaired" not in joined
+
+
+def test_hastur_task_keeps_repairing_until_success(tmp_path, monkeypatch):
+    _setup_project(tmp_path, monkeypatch)
+    repair_prompts = []
+
+    class FakeLLM:
+        def generate_text_stream(self, prompt, system_prompt=None):
+            yield "Planning."
+
+        def generate_text(self, prompt, system_prompt=None):
+            if "Do not write GDScript in this planning response" in prompt:
+                return '{"summary":"Plan","read_only":true,"steps":[{"title":"Create","goal":"Create terrain"}],"final":"Done"}'
+            if "previous complete Hastur GDScript batch failed" in prompt:
+                repair_prompts.append(prompt)
+                assert "compile failed" in prompt.lower() or "runtime failed" in prompt.lower()
+                if len(repair_prompts) < 3:
+                    return '{"code":"if true:\\n\\tprint(\\"still bad\\")"}'
+                return '{"code":"if true:\\n\\tprint(\\"fixed\\")"}'
+            return '{"code":"if true:\\n\\tprint(\\"bad\\")"}'
+
+    results = [
+        HasturExecuteResult(success=False, message="Hastur compile failed: first compile failed", gdscript="bad", broker_response={"data": {"compile_success": False, "compile_error": "first compile failed"}}),
+        HasturExecuteResult(success=False, message="Hastur compile failed: second compile failed", gdscript="bad2", broker_response={"data": {"compile_success": False, "compile_error": "second compile failed"}}),
+        HasturExecuteResult(success=False, message="Hastur runtime failed: third runtime failed", gdscript="bad3", broker_response={"data": {"run_success": False, "run_error": "third runtime failed"}}),
+        HasturExecuteResult(success=True, message="Hastur skill code executed.", gdscript="fixed"),
+    ]
+
+    monkeypatch.setattr(hastur_task_service, "get_llm_provider", lambda: FakeLLM())
+    monkeypatch.setattr(hastur_task_service, "apply_hastur_code", lambda *_args, **_kwargs: results.pop(0))
+
+    task = hastur_task_service.create_task("shadow-garden", "make land", "godot-remote-executor", confirmed=True)
+    joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
+
+    assert len(repair_prompts) == 3
+    assert "event: final" in joined
+    assert "could not be repaired" not in joined
+
+
+def test_hastur_task_final_uses_hastur_output(tmp_path, monkeypatch):
+    _setup_project(tmp_path, monkeypatch)
+
+    class FakeLLM:
+        def generate_text_stream(self, prompt, system_prompt=None):
+            yield "Reading the scene."
+
+        def generate_text(self, prompt, system_prompt=None):
+            if "Do not write GDScript in this planning response" in prompt:
+                return '{"summary":"Plan","read_only":true,"steps":[{"title":"Read tree","goal":"Return the current scene tree"}],"final":"Repeated plan text"}'
+            assert 'executeContext.output("result", text)' in prompt
+            assert "Generate ONE complete GDScript" in prompt
+            return '{"code":"executeContext.output(\\"scene_tree\\", \\"Main\\\\n  Label\\")"}'
+
+    def fake_apply(_slug, code, **_kwargs):
+        return HasturExecuteResult(
+            success=True,
+            message="ok",
+            gdscript=code,
+            broker_response={"data": {"outputs": [["scene_tree", "Main\n  Label"]]}},
+        )
+
+    monkeypatch.setattr(hastur_task_service, "get_llm_provider", lambda: FakeLLM())
+    monkeypatch.setattr(hastur_task_service, "apply_hastur_code", fake_apply)
+
+    task = hastur_task_service.create_task("shadow-garden", "list the full scene tree", "godot-remote-executor", confirmed=True)
+    joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
+
+    assert "Main\\n  Label" in joined
+    assert '"type": "final", "state": "complete", "message": "Main\\n  Label"' in joined
 
 
 def test_visual_checkpoint_pauses_with_llm_driven_user_prompt(tmp_path, monkeypatch):
@@ -210,8 +294,6 @@ def test_visual_checkpoint_pauses_with_llm_driven_user_prompt(tmp_path, monkeypa
         def generate_text(self, prompt, system_prompt=None):
             if "Do not write GDScript in this planning response" in prompt:
                 return '{"summary":"Plan","steps":[{"title":"Add sun","goal":"Add sunny lighting","needs_visual_check":true}],"final":"Done"}'
-            if "Create the user-facing confirmation prompt" in prompt:
-                return '{"title":"Review lighting","body":"The screenshot needs review.","choices":[{"id":"continue","label":"Continue","description":"Looks good","action":"continue"}]}'
             return '{"code":"executeContext.output(\\"ok\\", \\"1\\")"}'
 
     results = [
@@ -227,7 +309,49 @@ def test_visual_checkpoint_pauses_with_llm_driven_user_prompt(tmp_path, monkeypa
 
     assert "event: user_prompt" in joined
     assert "event: visual_checkpoint" not in joined
-    assert "Review lighting" in joined
+    assert "image_status" in joined
+    assert "missing" in joined
+
+
+def test_visual_checkpoint_only_exposes_verified_non_empty_png(tmp_path, monkeypatch):
+    project = _setup_project(tmp_path, monkeypatch)
+
+    class FakeLLM:
+        supports_images = False
+
+        def generate_text_stream(self, prompt, system_prompt=None):
+            yield "Planning."
+
+        def generate_text(self, prompt, system_prompt=None):
+            if "Do not write GDScript in this planning response" in prompt:
+                return '{"summary":"Plan","steps":[{"title":"Add camera","goal":"Adjust camera","needs_visual_check":true}],"final":"Done"}'
+            return '{"code":"executeContext.output(\\"ok\\", \\"1\\")"}'
+
+    calls = {"count": 0}
+
+    def fake_apply(_slug, code, **_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return HasturExecuteResult(success=True, message="batch ok", gdscript=code)
+        checkpoint = project / "assets" / "generated" / "visual_checkpoints" / "verified.png"
+        checkpoint.parent.mkdir(parents=True)
+        checkpoint.write_bytes(b"\x89PNG\r\n\x1a\nnonempty")
+        return HasturExecuteResult(
+            success=True,
+            message="screenshot ok",
+            gdscript=code,
+            broker_response={"data": {"outputs": [["image_status", "available"], ["image_path", "res://assets/generated/visual_checkpoints/verified.png"]]}},
+        )
+
+    monkeypatch.setattr(hastur_task_service, "get_llm_provider", lambda: FakeLLM())
+    monkeypatch.setattr(hastur_task_service, "apply_hastur_code", fake_apply)
+
+    task = hastur_task_service.create_task("shadow-garden", "adjust camera visual", "godot-remote-executor", confirmed=True)
+    joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
+
+    assert "event: user_prompt" in joined
+    assert '"image_status": "available"' in joined
+    assert "/api/projects/shadow-garden/visual-checkpoints/verified.png" in joined
 
 
 def test_extract_repair_code_from_steps_and_bare_gdscript():

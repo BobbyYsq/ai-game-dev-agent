@@ -66,7 +66,6 @@ const translations = {
     rollback_to_save: "Restore here",
     git_history_graph: "History graph",
     no_commits: "No saves yet.",
-    activity_summary: "Activity summary",
     broker_managed: "Dashboard broker",
     broker_external: "External broker",
     broker_stopped: "Broker stopped",
@@ -326,7 +325,17 @@ const uiTranslations = {
     changed_files: "Changed files",
     no_changes: "No local changes.",
     not_git_repository: "Not a Git repository.",
-    activity_summary: "Activity summary",
+    project_root: "Project root",
+    stop_task: "Stop",
+    task_cancelled: "Task cancelled.",
+    git_status_added: "Added",
+    git_status_modified: "Modified",
+    git_status_deleted: "Deleted",
+    git_status_renamed: "Renamed",
+    git_status_copied: "Copied",
+    git_status_type_changed: "Type changed",
+    git_status_conflict: "Conflict",
+    git_status_changed: "Changed",
     broker_managed: "Dashboard broker",
     broker_external: "External broker",
     broker_stopped: "Broker stopped",
@@ -363,6 +372,9 @@ const uiTranslations = {
     broker_stopped_state: "broker stopped",
     confirmation_needed: "Confirmation required",
     answer_and_continue: "Answer and continue",
+    thinking_placeholder: "Thinking...",
+    image_unavailable: "Screenshot is not available.",
+    image_load_failed: "Screenshot could not be loaded.",
     close: "Close",
     attach_files: "Attach files",
     assets_title: "Image Pipeline",
@@ -460,7 +472,17 @@ const uiTranslations = {
     changed_files: "改动文件",
     no_changes: "没有本地改动。",
     not_git_repository: "这不是 Git 仓库。",
-    activity_summary: "活动摘要",
+    project_root: "项目根目录",
+    stop_task: "停止",
+    task_cancelled: "任务已停止。",
+    git_status_added: "新增",
+    git_status_modified: "修改",
+    git_status_deleted: "删除",
+    git_status_renamed: "重命名",
+    git_status_copied: "复制",
+    git_status_type_changed: "类型变化",
+    git_status_conflict: "冲突",
+    git_status_changed: "改动",
     broker_managed: "控制台启动的 broker",
     broker_external: "外部运行的 broker",
     broker_stopped: "Broker 已停止",
@@ -497,6 +519,9 @@ const uiTranslations = {
     broker_stopped_state: "broker 已停止",
     confirmation_needed: "需要确认",
     answer_and_continue: "回答并继续",
+    thinking_placeholder: "思考中...",
+    image_unavailable: "截图不可用。",
+    image_load_failed: "截图无法加载。",
     close: "关闭",
     attach_files: "添加文件",
     assets_title: "图像管线",
@@ -974,7 +999,7 @@ function gitWorkbenchHTML(slug, data, targetId = "project_detail_pane", graphDat
       <button type="button" class="secondary" onclick="mergeGitToMain('${escapeAttr(slug)}', '${escapeAttr(targetId)}')" ${status.can_merge_to_main ? "" : "disabled"}>${escapeHTML(t("merge_to_main"))}</button>
     </div>
     <h4>${escapeHTML(t("changed_files"))}</h4>
-    ${files.length ? `<div class="git-file-list">${files.map((file) => gitFileRow(file)).join("")}</div>` : `<p class="muted-row">${escapeHTML(t("no_changes"))}</p>`}
+    ${files.length ? gitFileTreeHTML(files) : `<p class="muted-row">${escapeHTML(t("no_changes"))}</p>`}
     ${branchListHTML(slug, branches, current, targetId)}
     ${gitGraphHTML(slug, graphData || data.graph || {}, targetId)}
     <div id="${targetId}_git_action_output" class="inline-result"></div>`;
@@ -1032,12 +1057,28 @@ function gitGraphHTML(slug, graphData, targetId) {
     </div>`;
 }
 
+function gitFileTreeHTML(files) {
+  const groups = files.reduce((result, file) => {
+    const directory = file.directory || "";
+    if (!result[directory]) result[directory] = [];
+    result[directory].push(file);
+    return result;
+  }, {});
+  return `<div class="git-file-list">${Object.entries(groups).map(([directory, entries]) => `
+    <details class="git-dir-group" open>
+      <summary><span>${escapeHTML(directory || t("project_root"))}</span><small>${entries.length}</small></summary>
+      <div class="git-dir-files">${entries.map((file) => gitFileRow(file)).join("")}</div>
+    </details>`).join("")}</div>`;
+}
+
 function gitFileRow(file) {
   const path = file.path || "";
+  const kind = file.status_kind || "changed";
+  const label = t(`git_status_${kind}`) || file.display_status || file.status || "";
   return `
     <div class="git-file-row">
-      <code>${escapeHTML(file.status || "")}</code>
-      <span>${escapeHTML(path)}</span>
+      <span class="git-status-badge ${escapeAttr(kind)}">${escapeHTML(label)}</span>
+      <span class="git-file-path">${escapeHTML(path)}</span>
     </div>`;
 }
 
@@ -1081,16 +1122,9 @@ function chatGitStatusHTML(data) {
 }
 
 function gitCompactHTML(slug, status) {
-  const branches = status.branches || [];
   return `
     <div class="status-strip"><span>${escapeHTML(t("branch"))}: ${escapeHTML(status.branch || "-")}</span><span>${escapeHTML(status.dirty ? `${status.dirty_count || 0} ${t("dirty")}` : t("clean"))}</span></div>
-    <label><span>${escapeHTML(t("branch"))}</span><select id="chat_git_output_branch_select" onchange="switchGitBranch('${escapeAttr(slug)}', 'chat_git_output')">${branches.map((branch) => `<option value="${escapeAttr(branch.name)}" ${branch.current ? "selected" : ""}>${escapeHTML(branch.name)}</option>`).join("")}</select></label>
-    <div class="button-row">
-      <button type="button" class="secondary compact" onclick="saveGitSnapshot('${escapeAttr(slug)}', 'chat_git_output')" ${status.can_save ? "" : "disabled"}>${escapeHTML(t("save_snapshot"))}</button>
-      <button type="button" class="secondary compact" onclick="mergeGitToMain('${escapeAttr(slug)}', 'chat_git_output')" ${status.can_merge_to_main ? "" : "disabled"}>${escapeHTML(t("merge_to_main"))}</button>
-    </div>
-    <input id="chat_git_output_save_message" class="compact-input" autocomplete="off" placeholder="${escapeAttr(t("save_message"))}">
-    <div id="chat_git_output_git_action_output" class="inline-result compact-result"></div>`;
+    <p class="muted-row">${escapeHTML(t("chat_git_note"))}</p>`;
 }
 
 function openGitWorkbench() {
@@ -1331,7 +1365,7 @@ async function sendHasturChat(confirmed = false, answer = "") {
 function openTaskStream(slug, taskId) {
   const source = new EventSource(`/api/projects/${encodeURIComponent(slug)}/hastur/tasks/${encodeURIComponent(taskId)}/events`);
   state.activeEventSource = source;
-  ["thought_delta", "assistant_delta", "activity", "user_prompt", "step_result", "final", "error"].forEach((type) => {
+  ["thought_delta", "assistant_delta", "user_prompt", "final", "error"].forEach((type) => {
     source.addEventListener(type, (event) => handleTaskEvent(JSON.parse(event.data)));
   });
   source.onerror = () => {
@@ -1346,18 +1380,16 @@ function handleTaskEvent(event) {
   const kind = type === "error" ? "error" : type === "final" ? "success" : "";
   if (type === "thought_delta") appendAssistantThought(event.detail && event.detail.delta ? event.detail.delta : event.message || "");
   if (type === "assistant_delta") appendAssistantDelta(event.detail && event.detail.delta ? event.detail.delta : event.message || "");
-  if (type === "activity") appendAssistantActivity(event);
-  if (type === "step_result") appendAssistantActivity({ ...event, detail: { source: "step", detail: event.detail || {} } });
-  if (type === "final") appendAssistantActivity({ ...event, detail: { source: "summary", detail: event.detail || {} } });
-  setMessage("chatMessage", event.message || "", kind);
+  if (type !== "thought_delta" && type !== "assistant_delta") setMessage("chatMessage", event.message || "", kind);
   if (type === "user_prompt") renderTaskModal(event);
   if (type === "final") appendAssistantFinal(event.message || t("chat_done"));
-  if (type === "error" && !assistantHasText()) appendAssistantDelta(event.message || "Task failed.");
+  if (type === "error") appendAssistantError(event.message || "Task failed.");
   if (type === "final") refreshChatGit();
   if (type === "final" || type === "error") {
     if (state.activeEventSource) state.activeEventSource.close();
     state.activeEventSource = null;
     finalizeAssistantMessage();
+    state.activeTask = null;
     setChatBusy(false);
     closeTaskModal();
     $("chat_instruction").value = "";
@@ -1388,10 +1420,30 @@ async function resumeActiveTask(answer = "", confirmed = false, choiceId = "", r
   }
 }
 
+async function cancelActiveTask() {
+  if (!state.activeTask) return;
+  const slug = $("hastur_project_slug").value;
+  const taskId = state.activeTask.task_id;
+  if (state.activeEventSource) state.activeEventSource.close();
+  state.activeEventSource = null;
+  try {
+    await requestJSON(`/api/projects/${encodeURIComponent(slug)}/hastur/tasks/${encodeURIComponent(taskId)}/cancel`, { method: "POST" });
+    appendAssistantError(t("task_cancelled"));
+  } catch (error) {
+    appendAssistantError(error.message);
+  }
+  finalizeAssistantMessage();
+  state.activeTask = null;
+  closeTaskModal();
+  setChatBusy(false);
+}
+
 function setChatBusy(busy) {
   const button = $("chat_send_button");
+  const stopButton = $("chat_stop_button");
   const input = $("chat_instruction");
   if (button) button.disabled = busy;
+  if (stopButton) stopButton.classList.toggle("hidden", !busy);
   if (input) input.disabled = busy;
 }
 
@@ -1411,21 +1463,29 @@ function renderTaskModal(event) {
 
 function userPromptHTML(event, detail) {
   const choices = detail.choices || [];
-  const plan = detail.plan || {};
-  const steps = plan.steps || [];
-  const checkpoint = detail.visual_checkpoint || {};
-  const hasInput = detail.input_label !== "";
+  const imageStatus = detail.image_status || "none";
+  const imageUrl = imageStatus === "available" ? detail.image_url || "" : "";
+  const imageError = detail.image_error || (imageStatus && imageStatus !== "available" && imageStatus !== "none" && imageStatus !== "not_requested" ? t("image_unavailable") : "");
+  const hasInput = Boolean(detail.requires_input || detail.input_label || !choices.length);
   const inputLabel = detail.input_label || t("answer_and_continue");
   return `
-    <p>${escapeHTML(detail.body || event.message || plan.summary || "")}</p>
-    ${steps.length ? `<ol class="task-step-list">${steps.map((step) => `<li><strong>${escapeHTML(step.title || "")}</strong><span>${escapeHTML(step.goal || "")}</span></li>`).join("")}</ol>` : ""}
-    ${checkpoint.image_url ? `<img class="visual-checkpoint-image" src="${escapeAttr(checkpoint.image_url)}" alt="Visual checkpoint">` : ""}
-    ${checkpoint.analysis ? `<p class="muted-row">${escapeHTML(checkpoint.analysis)}</p>` : ""}
+    <p>${escapeHTML(detail.body || event.message || "")}</p>
+    ${imageUrl ? `<img class="visual-checkpoint-image" src="${escapeAttr(imageUrl)}" alt="Visual checkpoint" onerror="handlePromptImageError(this)">` : ""}
+    ${imageError ? `<p class="muted-row visual-checkpoint-error">${escapeHTML(imageError)}</p>` : ""}
     <div class="choice-list">
       ${choices.map((choice) => `<button type="button" class="choice-card" onclick="resumePromptChoice('${escapeAttr(choice.id || "")}')"><strong>${escapeHTML(choice.label || choice.id || "")}</strong><span>${escapeHTML(choice.description || "")}</span></button>`).join("")}
     </div>
     ${hasInput ? `<label><span>${escapeHTML(inputLabel)}</span><textarea id="task_prompt_answer" rows="3"></textarea></label>` : ""}
     ${hasInput || !choices.length ? `<button type="button" class="secondary" onclick="resumePromptAnswer()">${escapeHTML(t("answer_and_continue"))}</button>` : ""}`;
+}
+
+function handlePromptImageError(image) {
+  if (!image) return;
+  image.classList.add("hidden");
+  const error = document.createElement("p");
+  error.className = "muted-row visual-checkpoint-error";
+  error.textContent = t("image_load_failed");
+  image.insertAdjacentElement("afterend", error);
 }
 
 function resumePromptChoice(choiceId) {
@@ -1458,24 +1518,13 @@ function createAssistantMessage() {
   const messages = $("chat_messages");
   const article = document.createElement("article");
   article.className = "chat-message assistant streaming";
-  article.innerHTML = `
-    <div class="assistant-text"></div>
-    <details class="assistant-activity" open>
-      <summary>活动摘要</summary>
-      <div class="activity-list"></div>
-    </details>
-    <div class="assistant-actions hidden"></div>`;
-  article.querySelector("summary").textContent = t("activity_summary");
-  const thought = document.createElement("div");
-  thought.className = "activity-thought";
-  article.querySelector(".activity-list").before(thought);
+  article.innerHTML = `<div class="assistant-thinking"></div><div class="assistant-text" data-placeholder="${escapeAttr(t("thinking_placeholder"))}"></div><div class="assistant-actions hidden"></div>`;
   messages.appendChild(article);
   messages.scrollTop = messages.scrollHeight;
   return {
     article,
+    thinking: article.querySelector(".assistant-thinking"),
     text: article.querySelector(".assistant-text"),
-    thought: article.querySelector(".activity-thought"),
-    activity: article.querySelector(".activity-list"),
     actions: article.querySelector(".assistant-actions"),
   };
 }
@@ -1496,7 +1545,8 @@ function appendAssistantDelta(delta) {
 function appendAssistantThought(delta) {
   if (!delta) return;
   const assistant = ensureAssistantMessage();
-  assistant.thought.textContent += delta;
+  assistant.thinking.textContent += delta;
+  assistant.thinking.classList.toggle("hidden", !assistant.thinking.textContent.trim());
   const messages = $("chat_messages");
   messages.scrollTop = messages.scrollHeight;
 }
@@ -1509,23 +1559,13 @@ function appendAssistantFinal(text) {
   messages.scrollTop = messages.scrollHeight;
 }
 
-function appendAssistantActivity(event) {
+function appendAssistantError(text) {
+  if (!text) return;
   const assistant = ensureAssistantMessage();
-  const source = event.detail && event.detail.source ? event.detail.source : event.type || "activity";
-  const detail = event.detail && event.detail.detail ? event.detail.detail : {};
-  const row = document.createElement("div");
-  row.className = "activity-row";
-  row.innerHTML = `<strong>${escapeHTML(source)}</strong><span>${escapeHTML(activityMessage(event, detail))}</span>`;
-  assistant.activity.appendChild(row);
+  const current = assistant.text.textContent.trim();
+  assistant.text.textContent = current ? `${current}\n\n${text}` : text;
   const messages = $("chat_messages");
   messages.scrollTop = messages.scrollHeight;
-}
-
-function activityMessage(event, detail) {
-  if (event.message) return event.message;
-  if (detail && detail.result && detail.result.message) return detail.result.message;
-  if (detail && detail.step && detail.step.title) return detail.step.title;
-  return "";
 }
 
 function assistantHasText() {

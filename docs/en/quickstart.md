@@ -53,7 +53,7 @@ Godot editor plugins live under `addons/` and are enabled through `Project > Pro
 5. Select the project.
 6. Type `/` in the composer and choose a vendored Hastur skill.
 7. Attach reference files or images with the `+` button if needed.
-8. Send the request. Safe operations execute through Hastur; interruptive operations show a confirmation button first.
+8. Send the request. The chat streams public thinking and the detailed plan in the assistant bubble. Confirmed mutating plans run as one complete Hastur batch; failures are repaired as whole batches until success, cancellation, or an unrecoverable broker/provider problem.
 
 The UI never asks for raw GDScript. The LLM receives vendored skill instructions and the app injects broker URL/token privately.
 

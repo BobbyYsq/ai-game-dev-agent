@@ -26,10 +26,10 @@ There is no provider/model picker in the UI. Provider selection is automatic.
 - **Refresh**: reloads generated project folders.
 - **Project list**: selects one generated project. The output pane is attached to the selected project instead of floating below unrelated rows.
 - **Details**: shows the generated path and file list.
-- **Review changes**: opens the Git workbench with branch state, changed files, per-file diff buttons, selected-file commit, and selected-file discard.
-- **Commit selected**: requires a commit message and at least one selected file.
-- **History**: lists recent commits with manual revert and restore-file actions.
-- **Restore file**: restores only named files from a chosen commit. Full hard rollback is disabled.
+- **Review changes**: opens the Git workbench with branch state, project-level save/merge controls, friendly changed-file status labels, and collapsible directory groups.
+- **New branch**: creates and switches to a branch from the current save point while preserving uncommitted local changes in the working tree.
+- **Save**: commits all project changes with the entered message, or a timestamped default.
+- **History**: lists recent commits with safe restore-to-commit actions. Full hard rollback is disabled.
 
 ### Hastur Broker
 
@@ -43,13 +43,14 @@ There is no provider/model picker in the UI. Provider selection is automatic.
 
 - **Project selector**: selects the target generated Godot project.
 - **Readiness pill**: reports broker/executor readiness where known.
-- **Message history**: displays real LLM assistant deltas plus a collapsible activity summary for context loading, plan review, execution, visual checkpoints, repair, verification, and final summary.
+- **Message history**: displays public `thought_delta` work notes above streamed `assistant_delta` body text in the same assistant bubble. There is no activity-summary panel.
 - **Composer**: the only instruction input. Type `/` to open the vendored skill picker.
 - **Attachment button (`+`)**: uploads files and images for the request. Images are passed to providers that support image input; text files are summarized into the prompt.
-- **Send**: creates a Hastur task session and streams events back into the chat.
-- **Task modals**: plan confirmation, option choices, skill confirmation, and visual checkpoint review appear in a temporary modal.
-- **Visual checkpoint**: shows a saved Godot viewport screenshot when available, optional LLM visual analysis, and keep/adjust choices.
-- **Local Git panel**: is read-only in chat. It shows branch/dirty count and opens the manual Git workbench.
+- **Send**: creates a Hastur task session, streams public thinking and assistant text back into the chat, then executes the confirmed plan as one complete Hastur batch.
+- **Stop**: cancels the active task. This is the user escape hatch for long repair loops.
+- **Task modal**: the only modal is the generic prompt UI. It handles plan confirmation, option choices, visual review, and modification feedback using `title`, `body`, `choices`, `input_label`, `image_url`, `image_status`, and `requires_input`.
+- **Visual checkpoint**: shows a saved Godot viewport screenshot only when `image_status` is `available`; missing or failed screenshots appear as readable text instead of a broken image.
+- **Local Git panel**: is read-only in chat. It shows branch/dirty count and opens the manual Git workbench; branch/save/merge controls live in the workbench.
 
 The UI does not expose arbitrary GDScript entry. Hastur code is produced by the LLM under vendored skill instructions and sent through backend validation/safety checks.
 

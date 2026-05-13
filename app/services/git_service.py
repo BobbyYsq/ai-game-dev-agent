@@ -99,7 +99,7 @@ def status(project_dir: Path) -> dict[str, Any]:
             "can_delete_current": False,
         }
     _ensure_repository_ready(project_dir)
-    short = run_git(project_dir, ["status", "--short"])
+    short = _run_git_raw(project_dir, ["status", "--porcelain=v1", "-uall"]).stdout.rstrip()
     branch = _current_branch(project_dir)
     files = _parse_status_files(short)
     branch_list = branches(project_dir)["branches"]
@@ -123,7 +123,7 @@ def changes(project_dir: Path) -> dict[str, Any]:
     if not is_git_repo(project_dir):
         return {"is_repo": False, "status": status(project_dir), "files": [], "log": {"is_repo": False, "commits": []}}
     _ensure_repository_ready(project_dir)
-    short = run_git(project_dir, ["status", "--porcelain=v1", "-uall"])
+    short = _run_git_raw(project_dir, ["status", "--porcelain=v1", "-uall"]).stdout.rstrip()
     files = [_change_entry(line) for line in short.splitlines() if line]
     return {
         "success": True,
@@ -225,13 +225,13 @@ def branches(project_dir: Path) -> dict[str, Any]:
     _ensure_repository_ready(project_dir)
     output = _run_git_raw(
         project_dir,
-        ["branch", "--format=%(refname:short)%x1f%(HEAD)%x1f%(objectname:short)%x1f%(subject)"],
+        ["branch", "--format=%(refname:short)\t%(HEAD)\t%(objectname:short)\t%(subject)"],
         check=False,
     ).stdout.strip()
     current = _current_branch(project_dir)
     items = []
     for line in output.splitlines():
-        parts = line.split("\x1f")
+        parts = line.split("\t")
         if len(parts) != 4:
             continue
         name, head, short_hash, subject = parts
@@ -253,13 +253,18 @@ def create_branch(project_dir: Path, name: str, checkout: bool = True) -> dict[s
         init_repo(project_dir)
     _ensure_repository_ready(project_dir)
     branch_name = _validate_branch_name(project_dir, name)
-    if _is_dirty(project_dir):
-        return {"success": False, "message": "Save or discard local changes before creating a branch.", "status": status(project_dir)}
     existing = {branch["name"] for branch in branches(project_dir)["branches"]}
     if branch_name in existing:
         return {"success": False, "message": f"Branch already exists: {branch_name}", "status": status(project_dir)}
     args = ["checkout", "-b", branch_name] if checkout else ["branch", branch_name]
-    result = _run_git_raw(project_dir, args)
+    result = _run_git_raw(project_dir, args, check=False)
+    if result.returncode != 0:
+        return {
+            "success": False,
+            "message": _friendly_git_error(result.stderr or result.stdout),
+            "status": status(project_dir),
+            "graph": graph(project_dir),
+        }
     return {
         "success": True,
         "message": result.stdout.strip() or f"Created branch {branch_name}.",
@@ -273,12 +278,17 @@ def switch_branch(project_dir: Path, name: str) -> dict[str, Any]:
         return {"success": False, "message": "Project is not a Git repository."}
     _ensure_repository_ready(project_dir)
     branch_name = _validate_branch_name(project_dir, name)
-    if _is_dirty(project_dir):
-        return {"success": False, "message": "Save or discard local changes before switching branches.", "status": status(project_dir)}
     existing = {branch["name"] for branch in branches(project_dir)["branches"]}
     if branch_name not in existing:
         return {"success": False, "message": f"Branch not found: {branch_name}", "status": status(project_dir)}
-    result = _run_git_raw(project_dir, ["checkout", branch_name])
+    result = _run_git_raw(project_dir, ["checkout", branch_name], check=False)
+    if result.returncode != 0:
+        return {
+            "success": False,
+            "message": _friendly_git_error(result.stderr or result.stdout),
+            "status": status(project_dir),
+            "graph": graph(project_dir),
+        }
     return {
         "success": True,
         "message": result.stdout.strip() or f"Switched to {branch_name}.",
@@ -481,15 +491,57 @@ def _change_entry(line: str) -> dict[str, str]:
     staged = xy[0] not in {" ", "?"}
     unstaged = xy[1] not in {" "}
     untracked = xy == "??"
+    path = raw_path.strip('"')
+    status_kind = _status_kind(xy)
+    directory = str(Path(path).parent).replace("\\", "/")
+    if directory == ".":
+        directory = ""
     return {
         "status": status_code,
         "index_status": xy[0],
         "worktree_status": xy[1],
-        "path": raw_path.strip('"'),
+        "path": path,
+        "directory": directory,
+        "filename": Path(path).name,
+        "status_kind": status_kind,
+        "display_status": _display_status(status_kind),
         "staged": staged and not untracked,
         "unstaged": unstaged and not untracked,
         "untracked": untracked,
     }
+
+
+def _status_kind(xy: str) -> str:
+    if xy == "??":
+        return "added"
+    if "U" in xy or xy in {"AA", "DD"}:
+        return "conflict"
+    if "R" in xy:
+        return "renamed"
+    if "C" in xy:
+        return "copied"
+    if "D" in xy:
+        return "deleted"
+    if "T" in xy:
+        return "type_changed"
+    if "A" in xy:
+        return "added"
+    if "M" in xy:
+        return "modified"
+    return "changed"
+
+
+def _display_status(status_kind: str) -> str:
+    return {
+        "added": "Added",
+        "modified": "Modified",
+        "deleted": "Deleted",
+        "renamed": "Renamed",
+        "copied": "Copied",
+        "type_changed": "Type changed",
+        "conflict": "Conflict",
+        "changed": "Changed",
+    }.get(status_kind, "Changed")
 
 
 def _current_branch(project_dir: Path) -> str:
@@ -580,10 +632,15 @@ def _parse_refs(decorations: str) -> list[str]:
 
 def _friendly_git_error(text: str) -> str:
     cleaned = (text or "").strip()
+    lowered = cleaned.lower()
     if "not fully merged" in cleaned:
         return "This branch has not been merged yet. Merge it to main before deleting it."
     if "CONFLICT" in cleaned or "Automatic merge failed" in cleaned:
         return "Merge conflict. Resolve or discard conflicting changes manually, then try again."
+    if "would be overwritten by checkout" in lowered or "would be overwritten by merge" in lowered or "please commit your changes" in lowered:
+        return "This branch operation would overwrite local changes. Save or discard the affected files, then try again."
+    if "untracked working tree files would be overwritten" in lowered:
+        return "This branch operation would overwrite new local files. Save or discard the affected files, then try again."
     if "Filename too long" in cleaned or "unable to index file" in cleaned:
         return "Git could not index a generated Godot cache file. The project Git ignore metadata has been refreshed; try saving again."
     if "LF will be replaced by CRLF" in cleaned:

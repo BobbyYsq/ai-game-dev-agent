@@ -142,7 +142,20 @@ def test_branch_save_merge_delete_and_graph(tmp_path: Path):
     assert "feature" not in {branch["name"] for branch in git_service.branches(tmp_path)["branches"]}
 
 
-def test_rejects_switch_and_merge_with_dirty_worktree(tmp_path: Path):
+def test_create_branch_allows_dirty_worktree(tmp_path: Path):
+    git_service.init_repo(tmp_path)
+    (tmp_path / "file.txt").write_text("main", encoding="utf-8")
+    git_service.save(tmp_path, "initial")
+    (tmp_path / "dirty.txt").write_text("dirty", encoding="utf-8")
+
+    created = git_service.create_branch(tmp_path, "feature")
+
+    assert created["success"] is True
+    assert git_service.status(tmp_path)["branch"] == "feature"
+    assert (tmp_path / "dirty.txt").exists()
+
+
+def test_switch_allows_non_conflicting_dirty_worktree_and_merge_rejects_dirty(tmp_path: Path):
     git_service.init_repo(tmp_path)
     (tmp_path / "file.txt").write_text("main", encoding="utf-8")
     git_service.save(tmp_path, "initial")
@@ -153,8 +166,24 @@ def test_rejects_switch_and_merge_with_dirty_worktree(tmp_path: Path):
     switch = git_service.switch_branch(tmp_path, "feature")
     merge = git_service.merge_to_main(tmp_path)
 
-    assert switch["success"] is False
+    assert switch["success"] is True
     assert merge["success"] is False
+
+
+def test_git_status_has_friendly_change_fields(tmp_path: Path):
+    git_service.init_repo(tmp_path)
+    (tmp_path / "project.godot").write_text("main", encoding="utf-8")
+    git_service.save(tmp_path, "initial")
+    (tmp_path / "project.godot").write_text("changed", encoding="utf-8")
+    (tmp_path / "materials/town").mkdir(parents=True)
+    (tmp_path / "materials/town/roof.tres").write_text("roof", encoding="utf-8")
+
+    files = {item["path"]: item for item in git_service.status(tmp_path)["files"]}
+
+    assert files["project.godot"]["status_kind"] == "modified"
+    assert files["project.godot"]["display_status"] == "Modified"
+    assert files["materials/town/roof.tres"]["status_kind"] == "added"
+    assert files["materials/town/roof.tres"]["directory"] == "materials/town"
 
 
 def test_delete_current_or_main_branch_is_rejected(tmp_path: Path):
