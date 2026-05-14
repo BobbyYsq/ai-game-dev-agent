@@ -312,7 +312,11 @@ def test_ask_prompt_choice_replans_instead_of_skipping_empty_question_plan(tmp_p
                     "mode": "direct",
                     "summary": "Fix selected target",
                     "steps": [],
-                    "code": 'executeContext.output("result", "Before: target selected\\nAfter: Fixed from selected option")',
+                    "code": (
+                        'executeContext.output("result", '
+                        '"Before: path=GeneratedContent/TerrainMesh cull=BACK alpha=1.00 normal_y=-1.00 top_visible=false\\n'
+                        'After: path=GeneratedContent/TerrainMesh cull=BACK alpha=1.00 normal_y=1.00 winding=clockwise top_visible=true")'
+                    ),
                 }
             )
 
@@ -322,7 +326,19 @@ def test_ask_prompt_choice_replans_instead_of_skipping_empty_question_plan(tmp_p
             success=True,
             message="ok",
             gdscript=code,
-            broker_response={"data": {"outputs": [["result", "Before: target selected\nAfter: Fixed from selected option"]]}},
+            broker_response={
+                "data": {
+                    "outputs": [
+                        [
+                            "result",
+                            (
+                                "Before: path=GeneratedContent/TerrainMesh cull=BACK alpha=1.00 normal_y=-1.00 top_visible=false\n"
+                                "After: path=GeneratedContent/TerrainMesh cull=BACK alpha=1.00 normal_y=1.00 winding=clockwise top_visible=true"
+                            ),
+                        ]
+                    ]
+                }
+            },
         )
 
     monkeypatch.setattr(hastur_task_service, "get_llm_provider", lambda: FakeLLM())
@@ -339,7 +355,8 @@ def test_ask_prompt_choice_replans_instead_of_skipping_empty_question_plan(tmp_p
     assert calls["count"] == 2
     assert apply_calls["count"] == 1
     assert "event: final" in second
-    assert "Fixed from selected option" in second
+    assert "path=GeneratedContent/TerrainMesh" in second
+    assert "top_visible=true" in second
     assert "skipped" not in second
 
 
@@ -448,7 +465,7 @@ def test_plan_confirmation_retries_modal_repair_and_preserves_llm_choice_count(t
     assert applied == []
 
 
-def test_confirmed_plan_generates_one_complete_batch(tmp_path, monkeypatch):
+def test_confirmed_multi_step_plan_generates_sequential_batches(tmp_path, monkeypatch):
     _setup_project(tmp_path, monkeypatch)
     code_prompts = []
     executed = []
@@ -491,8 +508,8 @@ def test_confirmed_plan_generates_one_complete_batch(tmp_path, monkeypatch):
     task = hastur_task_service.create_task("shadow-garden", "build a village and wall", "godot-remote-executor", confirmed=True)
     joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
 
-    assert len(code_prompts) == 1
-    assert len(executed) == 1
+    assert len(code_prompts) == 2
+    assert len(executed) == 2
     assert "event: user_prompt" not in joined
     assert "event: final" in joined
 
@@ -545,6 +562,57 @@ def test_sequential_subtasks_emit_progress_and_execute_each_task(tmp_path, monke
     assert any(event["detail"]["current_task_id"] == "fix" for event in progress)
     assert "Before: mesh state" in joined
     assert "After: mesh fixed" in joined
+
+
+def test_multi_step_plan_forces_sequential_subtasks_even_if_llm_requests_single_batch(tmp_path, monkeypatch):
+    _setup_project(tmp_path, monkeypatch)
+    executed = []
+
+    class FakeLLM:
+        def generate_text_stream(self, prompt, system_prompt=None):
+            yield "Planning phased work."
+
+        def generate_text(self, prompt, system_prompt=None):
+            if "creating an execution decision" in prompt:
+                return json.dumps(
+                    {
+                        "mode": "plan",
+                        "complexity": "multi_step",
+                        "execution_strategy": "single_batch",
+                        "summary": "Complex map plan",
+                        "steps": [
+                            {"title": "Build terrain", "goal": "Create base land and water"},
+                            {"title": "Add biomes", "goal": "Place forests and mountains"},
+                        ],
+                        "task_breakdown": [
+                            {"id": "terrain", "title": "Build terrain", "goal": "Create base land and water"},
+                            {"id": "biomes", "title": "Add biomes", "goal": "Place forests and mountains"},
+                        ],
+                    }
+                )
+            if "Build terrain" in prompt:
+                return json.dumps({"code": 'executeContext.output("result", "terrain done")'})
+            return json.dumps({"code": 'executeContext.output("result", "biomes done")'})
+
+    def fake_apply(_slug, code, **_kwargs):
+        executed.append(code)
+        text = "terrain done" if "terrain done" in code else "biomes done"
+        return HasturExecuteResult(success=True, message="ok", gdscript=code, broker_response={"data": {"outputs": [["result", text]]}})
+
+    monkeypatch.setattr(hastur_task_service, "get_llm_provider", lambda: FakeLLM())
+    monkeypatch.setattr(hastur_task_service, "apply_hastur_code", fake_apply)
+
+    task = hastur_task_service.create_task("shadow-garden", "make a complex continent map", "godot-remote-executor", confirmed=True)
+    joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
+    breakdown = _event_payloads(joined, "task_breakdown")[0]["detail"]
+    progress = _event_payloads(joined, "task_progress")
+
+    assert breakdown["execution_strategy"] == "sequential_subtasks"
+    assert len(executed) == 2
+    assert any(event["detail"]["current_task_id"] == "terrain" for event in progress)
+    assert any(event["detail"]["current_task_id"] == "biomes" for event in progress)
+    assert "terrain done" in joined
+    assert "biomes done" in joined
 
 
 def test_hastur_task_repairs_failed_batch_without_streaming_agent_status(tmp_path, monkeypatch):
@@ -773,12 +841,173 @@ def test_direction_fix_requires_before_after_output_and_repairs(tmp_path, monkey
     monkeypatch.setattr(hastur_task_service, "get_llm_provider", lambda: FakeLLM())
     monkeypatch.setattr(hastur_task_service, "apply_hastur_code", fake_apply)
 
-    task = hastur_task_service.create_task("shadow-garden", "现在大陆的上下颠倒了，修正这个问题", "godot-remote-executor", confirmed=True)
+    task = hastur_task_service.create_task("shadow-garden", "fix upside-down continent orientation", "godot-remote-executor", confirmed=True)
     joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
 
     assert apply_calls["count"] == 2
     assert "Before: Continent scale.y=-1" in joined
     assert "After: Continent scale.y=1" in joined
+
+
+def test_mesh_surface_fix_requires_target_orientation_and_visibility_evidence(tmp_path, monkeypatch):
+    _setup_project(tmp_path, monkeypatch)
+    apply_calls = {"count": 0}
+
+    class FakeLLM:
+        def generate_text_stream(self, prompt, system_prompt=None):
+            yield "Checking the mesh target."
+
+        def generate_text(self, prompt, system_prompt=None):
+            if "creating an execution decision" in prompt:
+                return json.dumps(
+                    {
+                        "mode": "plan",
+                        "summary": "Fix continent material orientation",
+                        "read_only": False,
+                        "steps": [{"title": "Fix terrain mesh", "goal": "Fix front transparent back visible continent mesh"}],
+                    }
+                )
+            if "previous complete Hastur GDScript batch failed" in prompt:
+                assert "top_visible=true" in prompt
+                assert "intended target node path" in prompt
+                return json.dumps(
+                    {
+                        "code": (
+                            'executeContext.output("result", '
+                            '"Before: path=GeneratedContent/TerrainMesh cull=BACK alpha=1.00 normal_y=-1.00 top_visible=false\\n'
+                            'After: path=GeneratedContent/TerrainMesh cull=BACK alpha=1.00 normal_y=1.00 winding=clockwise top_visible=true")'
+                        )
+                    }
+                )
+            return json.dumps({"code": 'executeContext.output("result", "Continent mesh fixed")'})
+
+    def fake_apply(_slug, code, **_kwargs):
+        apply_calls["count"] += 1
+        if apply_calls["count"] == 1:
+            return HasturExecuteResult(
+                success=True,
+                message="ok",
+                gdscript=code,
+                broker_response={
+                    "data": {
+                        "outputs": [
+                            [
+                                "result",
+                                (
+                                    "Before:\n"
+                                    "path=/GeneratedContent/Forest/Tree_30_Leaves surf=1 normY=-0.37 cull=BACK alpha=1.00\n"
+                                    "After:\n"
+                                    "path=/GeneratedContent/Forest/Tree_30_Leaves surf=1 normY=0.37 cull=BACK alpha=1.00 "
+                                    "fix=rewind+opaqueCullBack saved"
+                                ),
+                            ]
+                        ]
+                    }
+                },
+            )
+        return HasturExecuteResult(
+            success=True,
+            message="ok",
+            gdscript=code,
+            broker_response={
+                "data": {
+                    "outputs": [
+                        [
+                            "result",
+                            (
+                                "Before: path=GeneratedContent/TerrainMesh cull=BACK alpha=1.00 normal_y=-1.00 top_visible=false\n"
+                                "After: path=GeneratedContent/TerrainMesh cull=BACK alpha=1.00 normal_y=1.00 winding=clockwise top_visible=true"
+                            ),
+                        ]
+                    ]
+                }
+            },
+        )
+
+    monkeypatch.setattr(hastur_task_service, "get_llm_provider", lambda: FakeLLM())
+    monkeypatch.setattr(hastur_task_service, "apply_hastur_code", fake_apply)
+
+    task = hastur_task_service.create_task(
+        "shadow-garden",
+        "修正大陆的材质上下颠倒，正面透明反面有材质",
+        "godot-remote-executor",
+        confirmed=True,
+    )
+    joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
+
+    assert apply_calls["count"] == 2
+    assert "did not prove the mesh surface orientation fix on the intended target" in joined
+    assert "path=GeneratedContent/TerrainMesh" in joined
+    assert "top_visible=true" in joined
+
+
+def test_mesh_surface_fix_rejects_truncated_internal_path_and_already_visible_before(tmp_path, monkeypatch):
+    _setup_project(tmp_path, monkeypatch)
+    apply_calls = {"count": 0}
+
+    class FakeLLM:
+        def generate_text_stream(self, prompt, system_prompt=None):
+            yield "Using mesh orientation skill."
+
+        def generate_text(self, prompt, system_prompt=None):
+            if "previous complete Hastur GDScript batch failed" in prompt:
+                assert "truncated" in prompt.lower()
+                return json.dumps(
+                    {
+                        "code": (
+                            'executeContext.output("result", '
+                            '"Before: path=GeneratedContent/TerrainMesh inst_trans=1.00 cull=BACK alpha=1.00 normal_y=1.00 top_visible=false\\n'
+                            'After: path=GeneratedContent/TerrainMesh inst_trans=0.00 cull=BACK alpha=1.00 normal_y=1.00 winding=clockwise top_visible=true saved=true")'
+                        )
+                    }
+                )
+            return json.dumps({"mode": "direct", "summary": "Fix mesh", "steps": [], "code": 'executeContext.output("result", "first")'})
+
+    def fake_apply(_slug, code, **_kwargs):
+        apply_calls["count"] += 1
+        if apply_calls["count"] == 1:
+            return HasturExecuteResult(
+                success=True,
+                message="ok",
+                gdscript=code,
+                broker_response={
+                    "data": {
+                        "outputs": [[
+                            "result",
+                            "[TRUNCATED: Output exceeded 800 char limit. Actual length: 936] Before: path=/root/@EditorNode@18065/@Panel/Main/GeneratedContinent/TerrainMesh cull=BACK alpha=1.00 normal_y=0.99 top_visible=true",
+                        ]]
+                    }
+                },
+            )
+        return HasturExecuteResult(
+            success=True,
+            message="ok",
+            gdscript=code,
+            broker_response={
+                "data": {
+                    "outputs": [[
+                        "result",
+                        "Before: path=GeneratedContent/TerrainMesh inst_trans=1.00 cull=BACK alpha=1.00 normal_y=1.00 top_visible=false\nAfter: path=GeneratedContent/TerrainMesh inst_trans=0.00 cull=BACK alpha=1.00 normal_y=1.00 winding=clockwise top_visible=true saved=true",
+                    ]]
+                }
+            },
+        )
+
+    monkeypatch.setattr(hastur_task_service, "get_llm_provider", lambda: FakeLLM())
+    monkeypatch.setattr(hastur_task_service, "apply_hastur_code", fake_apply)
+
+    task = hastur_task_service.create_task(
+        "shadow-garden",
+        "修复大陆材质正面透明反面有材质",
+        "godot-remote-executor",
+        confirmed=True,
+    )
+    joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
+
+    assert apply_calls["count"] == 2
+    assert "output was truncated" in joined
+    assert "inst_trans=0.00" in joined
+    assert "top_visible=true" in joined
 
 
 def test_context_requests_load_small_doc_snippets_on_demand(tmp_path, monkeypatch):
@@ -928,9 +1157,9 @@ def test_auto_skill_detection_respects_manual_only_and_paths(tmp_path, monkeypat
     assert "path-skill" in listing
 
 
-def test_auto_detected_skill_uses_metadata_without_full_body(tmp_path, monkeypatch):
+def test_auto_detected_skill_loads_full_body_and_announces_invocation(tmp_path, monkeypatch):
     _setup_project(tmp_path, monkeypatch)
-    marker = "AUTO FULL BODY SHOULD STAY OUT"
+    marker = "AUTO FULL BODY SHOULD APPEAR"
     path_skill = tmp_path / "skills" / "path-skill"
     path_skill.mkdir()
     (path_skill / "SKILL.md").write_text(
@@ -945,13 +1174,13 @@ def test_auto_detected_skill_uses_metadata_without_full_body(tmp_path, monkeypat
 
     class FakeLLM:
         def generate_text_stream(self, prompt, system_prompt=None):
-            assert "path-skill" in prompt
-            assert marker not in prompt
-            yield "Using the matching skill metadata."
+            yield "Using the matching skill."
 
         def generate_text(self, prompt, system_prompt=None):
+            if "Reply to the user" in prompt:
+                return "Using the matching skill."
             assert "path-skill" in prompt
-            assert marker not in prompt
+            assert marker in prompt
             if "Generate ONE complete GDScript" in prompt:
                 return json.dumps({"code": 'executeContext.output("result", "ok")'})
             return json.dumps(
@@ -983,19 +1212,21 @@ def test_auto_detected_skill_uses_metadata_without_full_body(tmp_path, monkeypat
     joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
 
     assert task["skill_name"] == "path-skill"
+    assert "Invoked Claude Code skill: /path-skill" in joined
     assert "event: final" in joined
 
 
-def test_context_request_loads_auto_skill_body_on_demand(tmp_path, monkeypatch):
+def test_disable_model_invocation_skill_body_loads_on_context_request(tmp_path, monkeypatch):
     _setup_project(tmp_path, monkeypatch)
     marker = "REQUESTED FULL BODY SHOULD APPEAR"
     path_skill = tmp_path / "skills" / "path-skill"
     path_skill.mkdir()
     (path_skill / "SKILL.md").write_text(
         "---\n"
-        "name: path-skill\n"
-        "description: terrain material helper\n"
-        "paths: [scenes/Main.tscn]\n"
+            "name: path-skill\n"
+            "description: terrain material helper\n"
+            "disable-model-invocation: true\n"
+            "paths: [scenes/Main.tscn]\n"
         "---\n\n"
         f"{marker}",
         encoding="utf-8",
@@ -1045,6 +1276,181 @@ def test_context_request_loads_auto_skill_body_on_demand(tmp_path, monkeypatch):
 
     assert calls["count"] == 2
     assert "event: final" in joined
+
+
+def test_skill_body_invocation_is_visible_in_work_log(tmp_path, monkeypatch):
+    _setup_project(tmp_path, monkeypatch)
+    skill_dir = tmp_path / "skills" / "direct-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: direct-skill\ndescription: Directly invoked helper\n---\n\nUse direct skill body.",
+        encoding="utf-8",
+    )
+
+    class FakeLLM:
+        def generate_text_stream(self, prompt, system_prompt=None):
+            yield "Planning with skill."
+
+        def generate_text(self, prompt, system_prompt=None):
+            assert "Use direct skill body" in prompt
+            return json.dumps({"mode": "direct", "summary": "Use skill", "steps": [], "code": 'executeContext.output("result", "ok")'})
+
+    monkeypatch.setattr(hastur_task_service, "get_llm_provider", lambda: FakeLLM())
+    monkeypatch.setattr(
+        hastur_task_service,
+        "apply_hastur_code",
+        lambda _slug, code, **_kwargs: HasturExecuteResult(success=True, message="ok", gdscript=code, broker_response={"data": {"outputs": [["result", "ok"]]}}),
+    )
+
+    task = hastur_task_service.create_task("shadow-garden", "/direct-skill run this", "direct-skill")
+    joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
+
+    assert "Invoked Claude Code skill: /direct-skill" in joined
+    assert '"kind": "skill"' in joined
+
+
+def test_auto_invoked_standard_skill_is_visible_for_mesh_surface_issue(tmp_path, monkeypatch):
+    _setup_project(tmp_path, monkeypatch)
+    skill_dir = tmp_path / "skills" / "mesh-surface-orientation-fix"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: mesh-surface-orientation-fix\n"
+        "description: Fix continent terrain mesh material front transparent back visible 大陆 材质 正面 透明 反面\n"
+        "when_to_use: Use for 大陆的材质上下颠倒 正面看是透明的 反面有材质\n"
+        "---\n\n"
+        "Skill body: inspect target path, cull, alpha, normal_y, winding, and top_visible=true.",
+        encoding="utf-8",
+    )
+
+    class FakeLLM:
+        def generate_text_stream(self, prompt, system_prompt=None):
+            yield "Planning mesh fix."
+
+        def generate_text(self, prompt, system_prompt=None):
+            assert "Skill body: inspect target path" in prompt
+            return json.dumps(
+                {
+                    "mode": "direct",
+                    "summary": "Fix mesh surface material",
+                    "steps": [],
+                    "code": (
+                        'executeContext.output("result", '
+                        '"Before: path=GeneratedContent/TerrainMesh cull=BACK alpha=1.00 normal_y=-1.00 top_visible=false\\n'
+                        'After: path=GeneratedContent/TerrainMesh cull=BACK alpha=1.00 normal_y=1.00 winding=clockwise top_visible=true")'
+                    ),
+                }
+            )
+
+    monkeypatch.setattr(hastur_task_service, "get_llm_provider", lambda: FakeLLM())
+    monkeypatch.setattr(
+        hastur_task_service,
+        "apply_hastur_code",
+        lambda _slug, code, **_kwargs: HasturExecuteResult(
+            success=True,
+            message="ok",
+            gdscript=code,
+            broker_response={
+                "data": {
+                    "outputs": [[
+                        "result",
+                        "Before: path=GeneratedContent/TerrainMesh cull=BACK alpha=1.00 normal_y=-1.00 top_visible=false\nAfter: path=GeneratedContent/TerrainMesh cull=BACK alpha=1.00 normal_y=1.00 winding=clockwise top_visible=true",
+                    ]]
+                }
+            },
+        ),
+    )
+
+    task = hastur_task_service.create_task("shadow-garden", "修复大陆材质正面透明反面有材质", "godot-remote-executor")
+    joined = "".join(hastur_task_service.stream_task_events(task["task_id"]))
+
+    assert "Invoked Claude Code skill: /mesh-surface-orientation-fix" in joined
+    assert '"kind": "skill"' in joined
+
+
+def test_visual_clarity_guidance_is_in_planning_codegen_and_repair_prompts(tmp_path, monkeypatch):
+    _setup_project(tmp_path, monkeypatch)
+    session = hastur_task_service.HasturTaskSession(
+        task_id="task",
+        project_slug="shadow-garden",
+        instruction="improve post processing and lighting clarity",
+        skill_name="godot-remote-executor",
+    )
+    docs = hastur_task_service._load_godot_docs()
+    plan = {
+        "mode": "plan",
+        "complexity": "simple",
+        "execution_strategy": "single_batch",
+        "summary": "Improve visibility",
+        "steps": [{"title": "Adjust clarity", "goal": "Make the preview clear"}],
+        "task_breakdown": [{"id": "task_1", "title": "Adjust clarity", "goal": "Make the preview clear"}],
+    }
+
+    planning_prompt = hastur_task_service._task_prompt(session, tmp_path, docs, "", {}, [])
+    code_prompt = hastur_task_service._batch_code_prompt(session, tmp_path, docs, "", {}, plan)
+    repair_prompt = hastur_task_service._batch_repair_prompt(
+        session,
+        tmp_path,
+        docs,
+        "",
+        {},
+        plan,
+        [{"success": False, "message": "too dark", "broker_response": {}}],
+        1,
+    )
+
+    for prompt in (planning_prompt, code_prompt, repair_prompt):
+        assert "prioritize a clear editor/game preview" in prompt
+        assert "dof_blur_near_enabled=false" in prompt
+        assert "volumetric fog" in prompt
+        assert "keep executeContext.output under 700 characters" in prompt
+
+
+def test_mesh_surface_orientation_guardrail_is_in_core_prompts(tmp_path, monkeypatch):
+    _setup_project(tmp_path, monkeypatch)
+    session = hastur_task_service.HasturTaskSession(
+        task_id="task",
+        project_slug="shadow-garden",
+        instruction="continent front is transparent, back side has material, fix upside-down terrain material",
+        skill_name="godot-remote-executor",
+    )
+    docs = hastur_task_service._load_godot_docs()
+    plan = {
+        "mode": "plan",
+        "complexity": "simple",
+        "execution_strategy": "single_batch",
+        "summary": "Fix terrain surface orientation",
+        "steps": [{"title": "Fix winding", "goal": "Make terrain top visible"}],
+        "task_breakdown": [{"id": "task_1", "title": "Fix winding", "goal": "Make terrain top visible"}],
+    }
+
+    planning_prompt = hastur_task_service._task_prompt(session, tmp_path, docs, "", {}, [])
+    code_prompt = hastur_task_service._batch_code_prompt(session, tmp_path, docs, "", {}, plan)
+    repair_prompt = hastur_task_service._batch_repair_prompt(
+        session,
+        tmp_path,
+        docs,
+        "",
+        {},
+        plan,
+        [{"success": False, "message": "front transparent", "broker_response": {}}],
+        1,
+    )
+
+    for prompt in (planning_prompt, code_prompt, repair_prompt):
+        assert "Mesh surface orientation rule" in prompt
+        assert "Godot ArrayMesh triangle front faces use clockwise winding" in prompt
+        assert "positive Y" in prompt
+        assert "Do not use CULL_DISABLED/two-sided material as the only fix" in prompt
+        assert "top_visible=true" in prompt
+        assert "Do not fix an incidental tree" in prompt
+
+
+def test_capability_registry_does_not_define_nonstandard_skills():
+    registry = hastur_task_service._capability_registry_text()
+
+    assert "built_in_guardrails" not in registry
+    assert "built_in_default_skills" not in registry
 
 
 def test_public_thought_sanitizer_blocks_code_and_payloads():

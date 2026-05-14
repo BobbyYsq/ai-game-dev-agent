@@ -50,6 +50,70 @@ def test_normalize_gdscript_rewrites_keyword_identifier():
     assert "node_type_name" in script
 
 
+def test_normalize_gdscript_promotes_execute_function_to_full_class():
+    raw = """func _execute(executeContext):
+    print(1)
+    executeContext.output("result", "1")"""
+
+    script = normalize_gdscript_code(raw)
+
+    assert script.startswith("extends RefCounted\n\nfunc execute(executeContext):")
+    assert "\n\tprint(1)" in script
+    assert "\n\texecuteContext.output" in script
+
+
+def test_normalize_gdscript_promotes_batch_helper_to_full_class():
+    raw = """func _hastur_batch(executeContext):
+    executeContext.output("result", "ok")"""
+
+    script = normalize_gdscript_code(raw)
+
+    assert script.startswith("extends RefCounted\n\nfunc execute(executeContext):")
+    assert "\n\t_hastur_batch(executeContext)" in script
+    assert "\nfunc _hastur_batch(executeContext):" in script
+
+
+def test_normalize_gdscript_converts_full_class_run_entrypoint():
+    raw = """extends RefCounted
+
+func run(executeContext) -> void:
+    var text: String = "hello world"
+    print(text)
+    executeContext.output("result", text)"""
+
+    script = normalize_gdscript_code(raw)
+
+    assert script.startswith("extends RefCounted\n\nfunc execute(executeContext) -> void:")
+    assert "\nfunc run(executeContext)" not in script
+    assert "\n\texecuteContext.output" in script
+
+
+def test_normalize_gdscript_converts_full_class_execute_alias():
+    raw = """extends RefCounted
+
+func _execute(executeContext):
+    executeContext.output("result", "1")"""
+
+    script = normalize_gdscript_code(raw)
+
+    assert script.startswith("extends RefCounted\n\nfunc execute(executeContext):")
+    assert "\nfunc _execute(executeContext)" not in script
+
+
+def test_normalize_gdscript_bridges_full_class_zero_arg_run():
+    raw = """extends RefCounted
+
+func run():
+    executeContext.output("result", "ok")"""
+
+    script = normalize_gdscript_code(raw)
+
+    assert script.startswith("extends RefCounted\n\nvar executeContext\n\nfunc execute(executeContext):")
+    assert "\n\tself.executeContext = executeContext" in script
+    assert "\n\trun()" in script
+    assert "\nfunc run():" in script
+
+
 def test_apply_hastur_code_treats_compile_failure_as_failure(tmp_path, monkeypatch):
     captured = {}
 

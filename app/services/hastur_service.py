@@ -137,6 +137,7 @@ def normalize_gdscript_code(code: str) -> str:
     text = _strip_code_fence(code).replace("\r\n", "\n").replace("\r", "\n").strip("\n")
     if not text.strip():
         raise EmptyGDScriptError("GDScript snippet is empty.")
+    text = _coerce_hastur_entrypoint(text)
 
     normalized_lines = []
     for line in text.split("\n"):
@@ -160,6 +161,51 @@ def _strip_code_fence(code: str) -> str:
     text = code.strip()
     fenced = re.fullmatch(r"```(?:gdscript|gd|gds|text)?\s*\n?(.*?)\n?```", text, re.DOTALL | re.IGNORECASE)
     return fenced.group(1) if fenced else text
+
+
+def _coerce_hastur_entrypoint(code: str) -> str:
+    if "extends" in code:
+        return _coerce_full_class_hastur_entrypoint(code)
+    if not re.search(r"(?m)^func\s+\w+\s*\(", code):
+        return code
+
+    converted = code
+    if re.search(r"(?m)^func\s+execute\s*\(\s*executeContext\s*\)\s*:", converted):
+        pass
+    elif re.search(r"(?m)^func\s+_execute\s*\(\s*executeContext\s*\)\s*:", converted):
+        converted = re.sub(r"(?m)^func\s+_execute\s*\(", "func execute(", converted, count=1)
+    elif re.search(r"(?m)^func\s+_hastur_batch\s*\(\s*executeContext\s*\)\s*:", converted):
+        converted = "func execute(executeContext):\n\t_hastur_batch(executeContext)\n\n" + converted
+    elif re.search(r"(?m)^func\s+run\s*\(\s*\)\s*:", converted):
+        converted = "var executeContext\n\nfunc execute(executeContext):\n\tself.executeContext = executeContext\n\trun()\n\n" + converted
+    else:
+        converted = re.sub(r"(?m)^func\s+\w+\s*\(", "func execute(", converted, count=1)
+    return "extends RefCounted\n\n" + converted
+
+
+def _coerce_full_class_hastur_entrypoint(code: str) -> str:
+    if re.search(r"(?m)^func\s+execute\s*\(\s*executeContext\s*\)", code):
+        return code
+    if re.search(r"(?m)^func\s+_execute\s*\(\s*executeContext\s*\)", code):
+        return re.sub(r"(?m)^func\s+_execute\s*\(", "func execute(", code, count=1)
+    if re.search(r"(?m)^func\s+run\s*\(\s*executeContext\s*\)", code):
+        return re.sub(r"(?m)^func\s+run\s*\(", "func execute(", code, count=1)
+
+    bridge = ""
+    if re.search(r"(?m)^func\s+_hastur_batch\s*\(\s*executeContext\s*\)", code):
+        bridge = "\n\nfunc execute(executeContext):\n\t_hastur_batch(executeContext)\n"
+    elif re.search(r"(?m)^func\s+run\s*\(\s*\)", code):
+        context_var = "\n" if re.search(r"(?m)^var\s+executeContext\b", code) else "\n\nvar executeContext\n"
+        bridge = f"{context_var}\nfunc execute(executeContext):\n\tself.executeContext = executeContext\n\trun()\n"
+
+    if not bridge:
+        return code
+
+    match = re.search(r"(?m)^extends\s+[^\n]+", code)
+    if not match:
+        return code
+    insert_at = match.end()
+    return code[:insert_at] + bridge + code[insert_at:]
 
 
 def _rewrite_unsafe_identifiers(line: str) -> str:

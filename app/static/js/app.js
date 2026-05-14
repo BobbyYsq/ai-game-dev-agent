@@ -1536,6 +1536,11 @@ function handleTaskEvent(event) {
   const type = event.type || "status";
   const kind = type === "error" ? "error" : type === "final" ? "success" : "";
   if (type === "thought_delta") appendWorkLog(event.detail && event.detail.delta ? event.detail.delta : event.message || "", event);
+  if (type === "thought_delta" && event.detail && event.detail.kind === "skill" && event.detail.skill_name) {
+    const current = (state.taskProgress && Array.isArray(state.taskProgress.active_skills)) ? state.taskProgress.active_skills : [];
+    const nextSkills = current.includes(event.detail.skill_name) ? current : [...current, event.detail.skill_name];
+    renderTaskPanel({ active_skills: nextSkills }, event);
+  }
   if (type === "assistant_delta") appendAssistantDelta(safeChatText(event.detail && event.detail.delta ? event.detail.delta : event.message || ""));
   if (type === "task_breakdown" || type === "task_progress") renderTaskPanel(event.detail || {}, event);
   if (!["thought_delta", "assistant_delta", "task_breakdown", "task_progress"].includes(type)) setMessage("chatMessage", event.message || "", kind);
@@ -1740,6 +1745,7 @@ function beginTaskPanel(task) {
     complexity: "",
     execution_strategy: "",
     current_task_id: "",
+    active_skills: [],
     tasks: [],
   };
   renderTaskPanel(state.taskProgress);
@@ -1768,6 +1774,9 @@ function renderTaskPanel(detail = {}, event = null) {
     [t("task_strategy"), next.execution_strategy || next.workflow_mode || "-"],
     [t("task_complexity"), next.complexity || "-"],
   ];
+  if (Array.isArray(next.active_skills) && next.active_skills.length) {
+    facts.push([state.language === "zh" ? "\u5df2\u8c03\u7528 Skills" : "Invoked skills", next.active_skills.map((name) => `/${name}`).join(", ")]);
+  }
   overview.innerHTML = `
     <dl>
       ${facts.map(([key, value]) => `<dt>${escapeHTML(key)}</dt><dd>${escapeHTML(value)}</dd>`).join("")}

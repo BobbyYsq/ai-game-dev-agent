@@ -56,6 +56,12 @@ GODOT_DOCS = [
     "godot-docs/classes/class_meshdatatool.rst.txt",
     "godot-docs/classes/class_surfacetool.rst.txt",
     "godot-docs/classes/class_basematerial3d.rst.txt",
+    "godot-docs/classes/class_environment.rst.txt",
+    "godot-docs/classes/class_worldenvironment.rst.txt",
+    "godot-docs/classes/class_cameraattributes.rst.txt",
+    "godot-docs/classes/class_cameraattributespractical.rst.txt",
+    "godot-docs/classes/class_light3d.rst.txt",
+    "godot-docs/classes/class_directionallight3d.rst.txt",
     "godot-docs/tutorials/assets_pipeline/importing_3d_scenes/model_export_considerations.rst.txt",
     "godot-docs/tutorials/3d/environment_and_post_processing.rst.txt",
 ]
@@ -94,6 +100,7 @@ class HasturTaskSession:
     context_request_keys: set[str] = field(default_factory=set)
     vision_summary: str = ""
     current_task_id: str = ""
+    announced_skills: set[str] = field(default_factory=set)
 
 
 _SESSIONS: dict[str, HasturTaskSession] = {}
@@ -282,6 +289,8 @@ def _run_task(session: HasturTaskSession) -> None:
             return
 
         skill_text = _skill_body_for_session(session)
+        if skill_text and session.skill_explicit:
+            _emit_skill_invocation_notice(session, session.skill_name, "explicit")
         _ensure_attachment_observations(session)
         if session.final_ready:
             final = _final_task_response(session, session.plan or {})
@@ -766,7 +775,7 @@ def _looks_like_gdscript(text: str) -> bool:
 
 
 def _capability_registry_text() -> str:
-    return """
+    return f"""
 - modal: Abstract user prompt tool. You may instantiate it by returning user_prompt with title, body, optional input_label, requires_input, and choices. The agent renders your modal copy and however many concrete choices you provide. Do not include an "I will type my own answer" choice because the custom reply box is always visible for alternate instructions; requires_input only means that custom reply is mandatory.
 - skills: Use the skill listing to decide whether a skill is relevant. Request full skill content with context_requests when needed.
 - godot_docs: Use the docs index to request small local snippets by path or keyword. Do not assume the full docs are in context.
@@ -776,18 +785,77 @@ def _capability_registry_text() -> str:
 
 
 def _skill_body_for_session(session: HasturTaskSession) -> str:
+    bodies: list[str] = []
     if not session.skill_explicit:
-        return ""
-    try:
-        return load_hastur_skill(session.skill_name, project_slug=session.project_slug)
-    except FileNotFoundError:
-        return ""
+        explicit_body = ""
+    else:
+        try:
+            explicit_body = load_hastur_skill(session.skill_name, project_slug=session.project_slug)
+            if explicit_body:
+                bodies.append(f"--- skill:{session.skill_name} ---\n{explicit_body[:6000]}")
+        except FileNotFoundError:
+            explicit_body = ""
+    for skill in _auto_invoked_skills(session):
+        if skill.name == session.skill_name and explicit_body:
+            continue
+        try:
+            body = load_hastur_skill(skill.name, project_slug=session.project_slug)
+            bodies.append(f"--- skill:{skill.name} ---\n{body[:6000]}")
+            _emit_skill_invocation_notice(session, skill.name, "auto")
+        except FileNotFoundError:
+            continue
+    return "\n\n".join(bodies)
+
+
+def _auto_invoked_skills(session: HasturTaskSession) -> list[Any]:
+    instruction = session.instruction.lower()
+    matches: list[Any] = []
+    for skill in list_hastur_skills(session.project_slug):
+        if skill.disable_model_invocation:
+            continue
+        if skill.name == _default_skill_name():
+            continue
+        haystack = f"{skill.name} {skill.description} {skill.when_to_use}".lower()
+        if _skill_matches_instruction_text(instruction, haystack):
+            matches.append(skill)
+    return matches
+
+
+def _skill_matches_instruction_text(instruction: str, haystack: str) -> bool:
+    latin_terms = [term for term in re.findall(r"[a-zA-Z][a-zA-Z_-]{3,}", instruction) if len(term) >= 4]
+    if any(term in haystack for term in latin_terms):
+        return True
+    chinese_terms = [
+        "\u5927\u9646",
+        "\u5730\u5f62",
+        "\u5730\u56fe",
+        "\u6b63\u9762",
+        "\u53cd\u9762",
+        "\u80cc\u9762",
+        "\u900f\u660e",
+        "\u6750\u8d28",
+        "\u4e0a\u4e0b",
+        "\u98a0\u5012",
+        "\u6cd5\u7ebf",
+        "\u5254\u9664",
+        "\u7ed5\u5e8f",
+        "\u540e\u671f",
+        "\u5149\u6e90",
+        "\u706f\u5149",
+        "\u73af\u5883",
+        "\u76f8\u673a",
+        "\u6e05\u6670",
+        "\u6a21\u7cca",
+        "\u9ed1\u6697",
+        "\u8fc7\u66dd",
+    ]
+    return any(term in instruction and term in haystack for term in chinese_terms)
 
 
 def _context_snippets_text(skill_text: str, snippets: list[str]) -> str:
     sections = []
     if skill_text:
-        sections.append("--- selected skill body ---\n" + skill_text[:6000])
+        sections.append(skill_text[:12000])
     sections.extend(snippet[:5000] for snippet in snippets if snippet.strip())
     return "\n\n".join(sections) if sections else "No full skill or Godot doc body is loaded yet. Use context_requests if needed."
 
@@ -807,6 +875,7 @@ def _resolve_context_requests(session: HasturTaskSession, requests: list[Any]) -
                 body = load_hastur_skill(name, project_slug=session.project_slug)
                 snippets.append(f"--- skill:{name} ---\n{body[:6000]}")
                 session.context_request_keys.add(key)
+                _emit_skill_invocation_notice(session, name, "context_request")
             except FileNotFoundError:
                 continue
         elif request_type == "godot_doc":
@@ -1017,7 +1086,8 @@ Complex scene-building tasks should be described as coherent implementation phas
 For read-only inspection requests, plan the minimum steps needed to return the requested factual result; do not turn the final answer into a repeat of the task.
 Any direct GDScript must call executeContext.output("result", text) at least once with non-empty user-displayable text.
 For direction, flip, upside-down, continent, map, terrain, or orientation fixes, first identify the exact target node/resource and intended correction. If the meaning or target is unclear, instantiate the modal tool to ask before modifying. When modifying, require before/after evidence in the output.
-Prefer conservative lighting/post-processing defaults: avoid overexposure, avoid high glow, prefer ACES/AgX/Filmic style tonemapping with controlled exposure/white values when applicable.
+{_visual_clarity_guidance()}
+{_mesh_surface_orientation_guidance()}
 {_godot_coordinate_summary()}
 Use user_prompt only by instantiating the abstract modal tool. All modal title, body, labels, and choices must come from you.
 If you need more context, return context_requests first instead of guessing. The agent will fetch only the requested local snippets and call you again.
@@ -1082,7 +1152,7 @@ Return JSON only:
 
 Always classify task complexity. Use "simple" only for one clear low-risk action or inspection; use "multi_step" for tasks that should be solved in phases; use "ambiguous" when user intent or target is unclear; use "risky" for destructive or interruption-prone changes.
 Always return task_breakdown. If simple, return exactly one task. If multi_step, return the smallest useful sequence of user-understandable tasks.
-Set execution_strategy to "single_batch" for simple tasks or tightly coupled edits, "sequential_subtasks" when each task should be executed and verified before the next, or "ask_first" when a modal question is required before execution.
+Set execution_strategy to "single_batch" only for simple tasks or genuinely atomic tightly coupled edits. For multi_step tasks with multiple task_breakdown items, prefer "sequential_subtasks" so each subtask is executed through Hastur, observed through its output, and fed back before generating the next subtask script. Use "ask_first" when a modal question is required before execution.
 Set mode to "direct" when no visible plan or user prompt is needed. In direct mode, steps must be empty and code must be executable GDScript for one Hastur editor execution.
 Set mode to "plan" only when you decide a visible plan is useful or user approval is needed.
 Set mode to "ask" when missing information must be collected before code or planning.
@@ -1121,7 +1191,8 @@ The snippet must be idempotent where practical, tab-indented, and must not use M
 Do not ask the user to paste code. Do not expose secrets or broker tokens.
 Do not use reserved identifiers such as class_name as variable names.
 Every batch must call executeContext.output("result", text) at least once with non-empty user-displayable text. This is required for read-only and mutating tasks.
-For visual lighting/post-processing, use conservative values and avoid overexposure.
+{_visual_clarity_guidance()}
+{_mesh_surface_orientation_guidance()}
 Use EditorInterface and scene/node APIs consistent with the local Godot docs.
 For inspection/list/read requests, do not mutate the scene; collect the requested facts and return them with executeContext.output("result", text). If the user asks for the scene tree, include the complete open edited scene tree in that output.
 For mutating scene tasks, save changed scenes/resources when appropriate and return a concise summary of changed nodes/resources with executeContext.output("result", text).
@@ -1171,6 +1242,8 @@ The repair must remain a complete one-run script, tab-indented, idempotent where
 The previous run may have compiled and run successfully but failed the output contract. The corrected batch must call executeContext.output("result", text) at least once with non-empty user-displayable text. Scene-tree requests must output the complete scene tree.
 If the task is a direction, flip, upside-down, inverted, continent, map, terrain, or orientation fix, the corrected batch must output Before: ... and After: ... evidence for the exact target node/resource.
 For front/back, transparent face, material, normal, cull, winding, mesh, or terrain surface fixes, the corrected batch must output Before: ... and After: ... evidence for the target MeshInstance3D, mesh surface/material state, and the applied fix.
+{_visual_clarity_guidance()}
+{_mesh_surface_orientation_guidance()}
 
 Repair attempt: {attempt}
 Project path: {project_dir}
@@ -1219,6 +1292,47 @@ def _docs_summary(docs: list[dict[str, str]]) -> str:
     return "\n".join(f"- {item['path']} ({item.get('title') or Path(item['path']).name}): {item['text'][:220].replace(chr(10), ' ')}" for item in docs)
 
 
+def _visual_clarity_guidance() -> str:
+    return (
+        "Visual clarity rule for lighting, camera, material, environment, and post-processing tasks: "
+        "prioritize a clear editor/game preview over cinematic mood. Do not make the scene darker, blurrier, foggier, "
+        "or more overexposed than before. Avoid enabling DOF blur, fog, volumetric fog, high glow/bloom, heavy SSAO, "
+        "high contrast, aggressive color grading, auto exposure, or very dark backgrounds unless the user explicitly asks for that exact effect. "
+        "For clear prototype previews, prefer a WorldEnvironment with ambient_light_energy around 0.6-1.2, "
+        "background_energy_multiplier around 0.8-1.2, tonemap_exposure around 0.8-1.1, tonemap white/AgX white high enough to prevent blown highlights, "
+        "CameraAttributes auto_exposure_enabled=false, dof_blur_near_enabled=false, dof_blur_far_enabled=false, and DirectionalLight3D light_energy around 0.7-1.5. "
+        "If the user asks to improve visibility or clarity, first disable/neutralize blur/fog/excessive glow/auto exposure before adding effects. "
+        "Output only concise Before/After evidence for key visibility settings such as environment, exposure, glow, fog, DOF, light energy, camera distance, and save status; keep executeContext.output under 700 characters."
+    )
+
+
+def _mesh_surface_orientation_guidance() -> str:
+    return (
+        "Mesh surface orientation rule for continent, terrain, map, front/back, transparent face, upside-down material, normals, culling, and winding tasks: "
+        "Godot ArrayMesh triangle front faces use clockwise winding. If the front/top appears transparent while the back/underside shows material, treat it as a mesh winding/normal/cull/material-alpha problem, not as a lighting or post-processing problem. "
+        "First inspect the exact MeshInstance3D, mesh surface count, surface material/material_override, material cull_mode, transparency/alpha, and representative triangle normals or vertex order. "
+        "Do not claim the fix from a successful broker run alone. The output must include concise Before/After evidence for the intended target node path, cull_mode, alpha/transparency, normal direction or winding, and explicit top/front visibility after the fix using a field such as top_visible=true, front_visible=true, or visible_from_above=true. "
+        "Do not fix an incidental tree, decoration, or child mesh when the user asked about the continent, terrain, map, or landmass; if the intended target is ambiguous, ask first instead of modifying the first invisible mesh found. "
+        "Prefer correcting triangle winding/normals so the visible terrain/continent top faces upward/outward, then use opaque material settings such as alpha 1.0 and disabled transparency with normal back-face culling. "
+        "Do not use CULL_DISABLED/two-sided material as the only fix unless the user explicitly asks for a two-sided surface or the mesh cannot be rebuilt; if used as a temporary visibility fallback, say so in the output. "
+        "For generated flat terrain or continent maps, top surface normals should generally have positive Y; reversing every triangle's index order is the usual repair when the underside is visible and the top is culled."
+    )
+
+
+def _emit_skill_invocation_notice(session: HasturTaskSession, name: str, source: str) -> None:
+    if not name or name in session.announced_skills:
+        return
+    session.announced_skills.add(name)
+    message = f"Invoked Claude Code skill: /{name}"
+    _emit(
+        session,
+        "thought_delta",
+        session.state,
+        message,
+        {"delta": message, "kind": "skill", "skill_name": name, "source": source},
+    )
+
+
 def _godot_coordinate_summary() -> str:
     return (
         "Godot 3D coordinates: right-handed; +Y is up; camera forward is -Z; "
@@ -1259,10 +1373,8 @@ def _normalize_plan(plan: dict[str, Any]) -> dict[str, Any]:
     complexity = str(plan.get("complexity") or "").strip()
     if complexity not in {"simple", "multi_step", "ambiguous", "risky"}:
         complexity = _infer_complexity(plan, normalized_steps)
-    execution_strategy = str(plan.get("execution_strategy") or "").strip()
-    if execution_strategy not in {"single_batch", "sequential_subtasks", "ask_first"}:
-        execution_strategy = "ask_first" if mode == "ask" else "single_batch"
     task_breakdown = _normalize_task_breakdown(plan, normalized_steps, complexity)
+    execution_strategy = _normalize_execution_strategy(plan, mode, complexity, task_breakdown)
     return {
         "mode": mode,
         "complexity": complexity,
@@ -1320,6 +1432,22 @@ def _infer_complexity(plan: dict[str, Any], steps: list[dict[str, Any]]) -> str:
     if len(steps) > 1:
         return "multi_step"
     return "simple"
+
+
+def _normalize_execution_strategy(
+    plan: dict[str, Any],
+    mode: str,
+    complexity: str,
+    task_breakdown: list[dict[str, Any]],
+) -> str:
+    value = str(plan.get("execution_strategy") or "").strip()
+    if mode == "ask":
+        return "ask_first"
+    if complexity == "multi_step" and len(task_breakdown) > 1 and not str(plan.get("code") or "").strip():
+        return "sequential_subtasks"
+    if value in {"single_batch", "sequential_subtasks", "ask_first"}:
+        return value
+    return "single_batch"
 
 
 def _normalize_task_breakdown(plan: dict[str, Any], steps: list[dict[str, Any]], complexity: str) -> list[dict[str, Any]]:
@@ -1838,10 +1966,24 @@ def _missing_output_contract_result(
     result: dict[str, Any],
 ) -> dict[str, Any] | None:
     output_text = _result_displayable_text(result)
-    if output_text and (not _requires_before_after_evidence(session, plan) or _has_before_after_evidence(output_text)):
+    needs_before_after = _requires_before_after_evidence(session, plan)
+    needs_mesh_orientation = _requires_mesh_surface_orientation_evidence(session, plan)
+    quality_reason = _output_quality_failure_reason(output_text, needs_mesh_orientation)
+    if output_text and quality_reason:
+        reason = quality_reason
+    elif output_text and (
+        (not needs_before_after or _has_before_after_evidence(output_text))
+        and (not needs_mesh_orientation or _has_mesh_surface_orientation_evidence(output_text))
+    ):
         return None
-    if output_text:
-        reason = "The task returned output but did not include required before/after evidence for the target node or resource."
+    elif output_text:
+        if needs_mesh_orientation and not _has_mesh_surface_orientation_evidence(output_text):
+            reason = (
+                "The task returned output but did not prove the mesh surface orientation fix on the intended target. "
+                "It must include target path, material/cull/alpha state, winding or normal evidence, and explicit top/front visibility after the fix."
+            )
+        else:
+            reason = "The task returned output but did not include required before/after evidence for the target node or resource."
     else:
         reason = "The task completed through Hastur but returned no non-empty executeContext.output entries."
     return {
@@ -1851,12 +1993,54 @@ def _missing_output_contract_result(
         "gdscript": result.get("gdscript"),
         "output_contract": {
             "required": True,
-            "before_after_required": _requires_before_after_evidence(session, plan),
+            "before_after_required": needs_before_after,
+            "mesh_surface_orientation_required": needs_mesh_orientation,
             "reason": reason,
             "original_success": bool(result.get("success")),
             "original_message": str(result.get("message") or ""),
         },
     }
+
+
+def _output_quality_failure_reason(output_text: str, needs_mesh_orientation: bool) -> str:
+    if not output_text:
+        return ""
+    lower = output_text.lower()
+    if "[truncated:" in lower or "output exceeded" in lower:
+        return "The task output was truncated. It must return concise evidence under the Hastur output limit."
+    if len(output_text) > 800:
+        return "The task output is too long. It must return concise evidence under 800 characters."
+    if needs_mesh_orientation and "@editornode" in lower:
+        return "The task output used an editor-internal path. Mesh orientation evidence must use a scene-relative target path."
+    if needs_mesh_orientation and _mesh_before_claims_already_visible(output_text):
+        return (
+            "The mesh evidence says the target was already top/front visible before the fix. "
+            "It did not reproduce the user's front-transparent/back-material problem and must inspect the real cause."
+        )
+    return ""
+
+
+def _mesh_before_claims_already_visible(output_text: str) -> bool:
+    lower = output_text.lower()
+    match = re.search(r"before:(.*?)(?:\nafter:|after:|$)", lower, re.DOTALL)
+    before = match.group(1) if match else lower
+    claims_visible = any(term in before for term in ["top_visible=true", "front_visible=true", "visible_from_above=true"])
+    if not claims_visible:
+        return False
+    bad_terms = [
+        "top_visible=false",
+        "front_visible=false",
+        "visible_from_above=false",
+        "cull=front",
+        "cull_mode=front",
+        "normal_y=-",
+        "normy=-",
+        "alpha=0",
+        "transp=alpha",
+        "transparency=alpha",
+        "instance_transparency=1",
+    ]
+    return not any(term in before for term in bad_terms)
 
 
 def _result_has_displayable_output(result: dict[str, Any]) -> bool:
@@ -1982,6 +2166,129 @@ def _has_before_after_evidence(text: str) -> bool:
     before_terms = ["before:", "before =", "before=", "old:", "previous:", "\u4fee\u6539\u524d", "\u4fee\u590d\u524d", "\u539f\u59cb", "\u4e4b\u524d", "\u5f53\u524d"]
     after_terms = ["after:", "after =", "after=", "new:", "updated:", "\u4fee\u6539\u540e", "\u4fee\u590d\u540e", "\u4e4b\u540e", "\u5b8c\u6210\u540e"]
     return any(term in lower for term in before_terms) and any(term in lower for term in after_terms)
+
+
+def _requires_mesh_surface_orientation_evidence(session: HasturTaskSession, plan: dict[str, Any]) -> bool:
+    if _is_read_only_plan(session, plan):
+        return False
+    text = " ".join(
+        [
+            session.instruction,
+            str(plan.get("summary") or ""),
+            " ".join(
+                f"{step.get('title') or ''} {step.get('goal') or ''}"
+                for step in plan.get("steps") or []
+            ),
+        ]
+    ).lower()
+    surface_terms = [
+        "front",
+        "back",
+        "backface",
+        "transparent",
+        "normal",
+        "normals",
+        "cull",
+        "culling",
+        "winding",
+        "surface",
+        "mesh",
+        "material",
+        "top",
+        "above",
+        "underside",
+        "\u6b63\u9762",
+        "\u53cd\u9762",
+        "\u80cc\u9762",
+        "\u900f\u660e",
+        "\u6cd5\u7ebf",
+        "\u7f51\u683c",
+        "\u8868\u9762",
+        "\u6750\u8d28",
+        "\u4e0a\u65b9",
+        "\u4e0a\u9762",
+        "\u4e0b\u65b9",
+        "\u4e0b\u9762",
+        "\u4e0a\u4e0b",
+        "\u98a0\u5012",
+    ]
+    fix_terms = [
+        "fix",
+        "repair",
+        "correct",
+        "issue",
+        "problem",
+        "wrong",
+        "\u4fee\u6b63",
+        "\u4fee\u590d",
+        "\u95ee\u9898",
+        "\u4e0d\u5bf9",
+        "\u9519",
+    ]
+    return any(term in text for term in surface_terms) and any(term in text for term in fix_terms)
+
+
+def _has_mesh_surface_orientation_evidence(text: str) -> bool:
+    lower = text.lower()
+    target_terms = [
+        "path=",
+        "target=",
+        "node=",
+        "meshinstance3d",
+        "terrain",
+        "continent",
+        "landmass",
+        "map",
+        "\u8def\u5f84",
+        "\u76ee\u6807",
+        "\u8282\u70b9",
+        "\u5730\u5f62",
+        "\u5927\u9646",
+        "\u5730\u56fe",
+    ]
+    material_terms = [
+        "cull",
+        "cull_mode",
+        "alpha",
+        "transparency",
+        "opaque",
+        "material",
+        "\u6750\u8d28",
+        "\u900f\u660e",
+        "\u4e0d\u900f\u660e",
+    ]
+    orientation_terms = [
+        "normal",
+        "normy",
+        "normal_y",
+        "winding",
+        "clockwise",
+        "rewind",
+        "reverse",
+        "indices",
+        "\u6cd5\u7ebf",
+        "\u7ed5\u5e8f",
+        "\u987a\u65f6\u9488",
+        "\u53cd\u8f6c",
+    ]
+    visibility_terms = [
+        "top_visible=true",
+        "front_visible=true",
+        "visible_from_above=true",
+        "above_visible=true",
+        "top visible",
+        "front visible",
+        "from above visible",
+        "\u4e0a\u65b9\u53ef\u89c1",
+        "\u4e0a\u9762\u53ef\u89c1",
+        "\u6b63\u9762\u53ef\u89c1",
+    ]
+    return (
+        any(term in lower for term in target_terms)
+        and any(term in lower for term in material_terms)
+        and any(term in lower for term in orientation_terms)
+        and any(term in lower for term in visibility_terms)
+    )
 
 
 def _final_task_response(session: HasturTaskSession, plan: dict[str, Any]) -> str:
