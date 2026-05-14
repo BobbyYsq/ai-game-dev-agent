@@ -1,55 +1,77 @@
 # 快速开始
 
-## Windows
+## 1. 启动应用
 
-双击：
+Windows：
 
-```text
+```powershell
 start_windows.cmd
 ```
 
-该入口会调用 `bootstrap/bootstrap_windows.ps1`。第一次启动时，它会下载 portable Micromamba，只使用 `conda-forge` 创建 `runtime/envs/ai-game-dev-agent`，从 `requirements.txt` 安装 Python 包，从 8000-8003 中选择可用端口，打开浏览器，并启动 FastAPI。
-
-## macOS
-
-运行：
+macOS：
 
 ```bash
-chmod +x start_macos.command
 ./start_macos.command
 ```
 
-该入口会调用 `bootstrap/bootstrap_macos.sh`，自动识别 `arm64` 或 `x86_64`，下载对应的 Micromamba，只使用 `conda-forge` 创建本地运行环境，从 `requirements.txt` 安装 Python 包，打开浏览器，并启动 FastAPI。
+Linux/Unix：
 
-## 创建第一个项目
+```bash
+./start_unix.sh
+```
 
-1. 离线测试时保留 `mock` provider。
-2. 输入项目名称和游戏想法。
-3. 选择 `2D Game Prototype` 或 `3D Game Prototype`。
-4. 点击 `Create AI Game Project`。
-5. 在 Godot 4 中打开 `workspace/generated_godot_projects/` 下生成的项目。
-6. 运行 `scenes/Main.tscn`。
+启动后打开 `http://localhost:8000/`。
 
-## 本地运行环境
+## 2. 配置 API
 
-`runtime/` 是自动生成的本地目录，不应该提交到 Git。如果依赖环境损坏，可以关闭应用并删除 `runtime/`，下一次启动会重新创建。
+1. 打开 **管理**。
+2. 在 **LLM API 密钥** 中粘贴 ChatGPT/OpenAI API key。
+3. 在 **图像 API 密钥** 中粘贴可使用图像生成的 API key。
+4. 点击 **保存设置**。
+5. 点击 **测试 LLM** 检查文本模型。
+6. 点击 **检查图像配置** 检查图像 key 和本地默认参数。
 
-启动脚本不会使用 Anaconda `defaults` channel，因此正常启动时不应该再看到 Anaconda Terms warning。
-## 生成图像资产
+## 3. 创建 Godot 项目
 
-1. 先创建或选择一个已有生成项目。
-2. 打开 Assets 面板。
-3. 离线测试使用 `mock`，真实生成选择 `openai` 并配置 API Key。
-4. 选择用途，例如 `concept_art` 或 `blender_3d_reference`。
-5. 生成图片后，可以加入 GDD 或标记为 Blender 参考。
+1. 在 **空白 Godot 项目** 输入项目名称。
+2. 点击 **创建项目**。
+3. 项目会生成在 `workspace/generated_godot_projects/<slug>/`。
+4. 使用 Godot 打开该项目，确认插件列表中 Hastur 已启用。
 
-## Hastur 桥接
+## 4. 启动 Hastur
 
-1. 在本机启动 Hastur broker。
-2. 在目标 Godot 项目中启用插件。
-3. 在 Hastur 面板保存 broker 地址。
-4. 检查状态并加载执行器。
-5. UI 只执行结构化 operation，不直接执行任意 GDScript。
-# v0.3 Addendum
+1. 在 **Hastur Broker** 点击 **启动 Broker**。
+2. 打开 Godot 项目并等待 executor 连接。
+3. 点击 **Executors** 检查连接状态。
 
-Use the Hastur panel to start the local broker. Projects created from the Godot Project panel include and enable the Hastur addon automatically. Open the generated project in Godot, load executors, then use AI Godot Operation to generate and execute validated operation plans.
+## 5. 使用 LLM + Hastur
+
+1. 打开 **LLM + Hastur**。
+2. 选择项目。
+3. 在输入框输入任务，也可以输入 `/` 选择内置 skill。
+4. 上传需要的图片或文件。
+5. 点击 **发送**。
+6. LLM 回复会像 ChatGPT 一样在同一个 assistant 气泡中流式显示公开思考和正文；最终消息会优先返回真实 Hastur 执行输出。
+7. 运行中可以点击 **停止** 取消当前任务。
+8. 如果 agent 需要计划确认、方案选择、视觉检查或修改意见，会弹出同一个通用窗口等待你选择；详细计划只在聊天正文中显示。
+9. 确认后任务会一次生成完整 Hastur batch 并执行；如果 batch 失败，agent 会把完整 Hastur 错误、broker payload 和失败代码摘要继续发回 LLM 修复，直到成功、你取消，或 broker/executor/provider 不可用。
+
+## 6. 使用图像管线
+
+1. 打开 **图像管线**。
+2. 选择项目、用途、尺寸和质量。
+3. 输入提示词，可上传参考图片或文件。
+4. 点击 **生成图像**。
+5. 在图库中审查结果，可批准加入 GDD、标记为 Blender 参考或重新生成。
+
+## 7. 使用本地 Git
+
+在 **项目工作台** 中执行 Git 操作；**LLM + Hastur** 页只显示分支和改动数量，并提供打开 Git 工作台的入口：
+
+- **改动文件**：按目录折叠显示文件，使用“新增”“修改”“删除”等可读状态。
+- **新建分支**：允许在有本地改动时从当前保存点创建并切换分支，未提交改动会保留在工作区。
+- **保存**：输入保存说明后提交整个项目的当前改动。
+- **合并到 main**：把当前分支合并回 `main`；如果会覆盖本地改动，先保存或丢弃受影响文件。
+- **历史图**：查看最近 commit，并可安全回档到指定保存点。
+
+当前版本不做 push、PR 或远程 Git 操作。

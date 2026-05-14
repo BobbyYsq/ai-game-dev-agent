@@ -1,99 +1,21 @@
-# API
-
-## 健康检查
-
-`GET /api/health`
-
-返回应用状态和版本。
+# API 参考
 
 ## 设置
 
-`GET /api/settings`
-
-只返回公开设置，不返回 API Key 或 Hastur token 明文。
-
-`POST /api/settings`
-
-保存本地设置到 `workspace/config/settings.json`。
-
-```json
-{
-  "llm_provider": "openai",
-  "openai_model": "gpt-4.1-mini",
-  "openai_api_key": "sk-...",
-  "image_provider": "openai",
-  "openai_image_model": "gpt-image-2",
-  "image_size": "1024x1024",
-  "image_quality": "medium",
-  "hastur_enabled": true,
-  "hastur_base_url": "http://localhost:5302",
-  "hastur_auth_token": "local-token"
-}
-```
+- `GET /api/settings`：返回公开设置，不返回 API key 或 Hastur token。
+- `POST /api/settings`：保存本地设置到 `workspace/config/settings.json`。
+- `POST /api/settings/test-llm`：发送小型 LLM 请求检查 key 是否可用。
+- `POST /api/settings/test-image-config`：只做本地图像配置检查。
 
 ## 项目
 
-`POST /api/projects/create`
-
-```json
-{
-  "project_name": "Shadow Garden",
-  "game_idea": "A haunted garden top-down action prototype.",
-  "project_template": "2d",
-  "game_type": "2D top-down action",
-  "engine": "Godot 4",
-  "prototype_scope": "vertical slice",
-  "enable_git": true,
-  "generate_docs": true,
-  "generate_godot_skeleton": true
-}
-```
-
-`GET /api/projects`
-
-列出最近生成的项目。
-
-`GET /api/projects/{project_slug}`
-
-返回项目路径和生成文件列表。
+- `POST /api/godot-projects/create`：创建启用 Hastur 的空白 Godot 项目，并初始化本地 Git。
+- `GET /api/projects`：列出已生成项目。
+- `GET /api/projects/{project_slug}`：返回项目路径和文件列表。
 
 ## 图像资产
 
-`POST /api/projects/{project_slug}/assets/images/generate`
-
-```json
-{
-  "prompt": "A haunted garden top-down action game concept art, readable silhouettes, dark fantasy.",
-  "purpose": "concept_art",
-  "model": "gpt-image-2",
-  "size": "1024x1024",
-  "quality": "medium"
-}
-```
-
-支持的用途：
-
-- `concept_art`
-- `gdd_reference`
-- `2d_sprite_draft`
-- `ui_icon`
-- `texture_reference`
-- `blender_3d_reference`
-
-生成图片保存到：
-
-```text
-workspace/generated_godot_projects/<project_slug>/assets/generated/cache/images/
-```
-
-资产元数据保存到：
-
-```text
-workspace/generated_godot_projects/<project_slug>/assets/generated/asset_manifest.json
-```
-
-其他资产接口：
-
+- `POST /api/projects/{project_slug}/assets/images/generate`
 - `GET /api/projects/{project_slug}/assets`
 - `GET /api/projects/{project_slug}/assets/{asset_id}/file`
 - `POST /api/projects/{project_slug}/assets/{asset_id}/attach-to-gdd`
@@ -101,36 +23,51 @@ workspace/generated_godot_projects/<project_slug>/assets/generated/asset_manifes
 
 ## Hastur
 
-`GET /api/hastur/status`
+Broker 和 skill：
 
-检查本地 Hastur broker。
-
-`GET /api/hastur/executors`
-
-当 broker 可用时，列出已连接的 Godot 编辑器实例。
-
-`POST /api/projects/{project_slug}/hastur/apply-operation`
-
-```json
-{
-  "operation": {
-    "operation": "create_node",
-    "target_scene": "res://scenes/Main.tscn",
-    "node_type": "Node2D",
-    "node_name": "GeneratedRoot",
-    "parent_path": "."
-  }
-}
-```
-
-后端会用 Pydantic 校验 operation，再转换为受控 GDScript。UI 不开放任意 GDScript 输入。
-# v0.3 Addendum
-
-- `POST /api/godot-projects/create`
-- `GET /api/hastur/broker/status`
 - `POST /api/hastur/broker/start`
 - `POST /api/hastur/broker/stop`
+- `GET /api/hastur/broker/status`
 - `GET /api/hastur/broker/logs`
-- `POST /api/projects/{project_slug}/hastur/plan`
-- `POST /api/projects/{project_slug}/hastur/execute-plan`
-- `POST /api/projects/{project_slug}/hastur/plan-and-execute`
+- `GET /api/hastur/executors`
+- `GET /api/hastur/skills`
+
+兼容聊天接口：
+
+- `POST /api/projects/{project_slug}/hastur/chat`
+
+Codex-like 任务接口：
+
+- `POST /api/projects/{project_slug}/hastur/tasks`
+- `GET /api/projects/{project_slug}/hastur/tasks/{task_id}/events`
+- `POST /api/projects/{project_slug}/hastur/tasks/{task_id}/resume`
+- `POST /api/projects/{project_slug}/hastur/tasks/{task_id}/cancel`
+
+SSE 中，公开工作流思考通过 `thought_delta` 流式返回；用户可见计划/结果正文通过 `assistant_delta` 流式返回；需要用户输入时只使用统一的 `user_prompt`；结束状态使用 `final` 或 `error`。前端应把 `thought_delta` 和 `assistant_delta` 渲染在同一个 assistant 气泡中，不再依赖 `plan_review`、`choice_request` 或 `visual_checkpoint` 专用事件。
+
+`user_prompt.detail` 是通用弹窗载荷，字段固定为 `title`、`body`、`choices`、`input_label`、`requires_input`。详细计划只出现在聊天正文中，弹窗只负责确认、选择或修改意见。
+
+确认后的修改型任务会生成一个完整的 Hastur editor batch。编译或运行失败时，后端把完整 broker payload、失败代码摘要和当前目标发回 LLM，让 LLM 继续生成完整修复 batch，直到成功、用户取消或 provider/broker/executor 不可恢复失败。
+
+任务流不再生成截图 review/checkpoint 弹窗；视觉判断来自用户上传图片的 LLM 摘要或 Hastur 返回的文本证据。
+
+## Git
+
+- `GET /api/projects/{project_slug}/git/status`
+- `GET /api/projects/{project_slug}/git/review`
+- `GET /api/projects/{project_slug}/git/diff`
+- `GET /api/projects/{project_slug}/git/changes`
+- `GET /api/projects/{project_slug}/git/log`
+- `GET /api/projects/{project_slug}/git/branches`
+- `POST /api/projects/{project_slug}/git/save`
+- `POST /api/projects/{project_slug}/git/branches`
+- `POST /api/projects/{project_slug}/git/branches/switch`
+- `DELETE /api/projects/{project_slug}/git/branches/{branch_name}`
+- `POST /api/projects/{project_slug}/git/merge-to-main`
+- `POST /api/projects/{project_slug}/git/commit`
+- `POST /api/projects/{project_slug}/git/discard`
+- `POST /api/projects/{project_slug}/git/revert`
+- `POST /api/projects/{project_slug}/git/restore-file`
+- `POST /api/projects/{project_slug}/git/rollback`
+
+`status` 和 `changes` 返回 `status_kind`、`display_status`、`directory`、`filename` 等友好字段。新建分支会保留未提交本地改动；切换分支只在 Git 判断不会覆盖本地改动时执行。`rollback` 使用安全恢复提交，不执行 `git reset --hard`。

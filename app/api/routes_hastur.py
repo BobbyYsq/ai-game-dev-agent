@@ -1,9 +1,13 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Any
 
 from app.services.broker_service import broker_logs, broker_status, start_broker, stop_broker
+from app.services.hastur_chat_service import chat_with_hastur_skill
+from app.services.hastur_task_service import cancel_task, create_task, resume_task, stream_task_events
 from app.services.hastur_service import GodotOperation, apply_hastur_operation, hastur_executors, hastur_status
+from app.services.hastur_skill_service import list_hastur_skills
 from app.services.godot_operation_service import execute_godot_operation_plan, plan_godot_operations
 
 router = APIRouter()
@@ -29,6 +33,36 @@ class BrokerStartRequest(BaseModel):
     host: str | None = None
     http_port: int | None = None
     tcp_port: int | None = None
+
+
+class UploadedImage(BaseModel):
+    filename: str
+    media_type: str
+    data: str
+
+
+class HasturChatRequest(BaseModel):
+    instruction: str
+    skill_name: str = "godot-remote-executor"
+    execute: bool = True
+    confirmed: bool = False
+    images: list[UploadedImage] = []
+    attachments: list[UploadedImage] = []
+
+
+class HasturTaskRequest(BaseModel):
+    instruction: str
+    skill_name: str | None = None
+    workflow_mode: str = "auto"
+    confirmed: bool = False
+    attachments: list[UploadedImage] = []
+
+
+class HasturTaskResumeRequest(BaseModel):
+    answer: str = ""
+    confirmed: bool = False
+    choice_id: str = ""
+    revision_request: str = ""
 
 
 @router.get("/api/hastur/broker/status")
@@ -62,6 +96,76 @@ def get_hastur_status():
 @router.get("/api/hastur/executors")
 def get_hastur_executors():
     return hastur_executors()
+
+
+@router.get("/api/hastur/skills")
+def get_hastur_skills():
+    return {"skills": [skill.__dict__ for skill in list_hastur_skills()]}
+
+
+@router.post("/api/projects/{project_slug}/hastur/chat")
+def chat_with_hastur(project_slug: str, payload: HasturChatRequest):
+    if not payload.instruction.strip():
+        raise HTTPException(status_code=422, detail="instruction is required")
+    try:
+        return chat_with_hastur_skill(
+            project_slug=project_slug,
+            instruction=payload.instruction.strip(),
+            skill_name=payload.skill_name,
+            images=[image.model_dump() for image in payload.images],
+            attachments=[attachment.model_dump() for attachment in payload.attachments],
+            execute=payload.execute,
+            confirmed=payload.confirmed,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Hastur chat failed: {exc}") from exc
+
+
+@router.post("/api/projects/{project_slug}/hastur/tasks")
+def create_hastur_task(project_slug: str, payload: HasturTaskRequest):
+    if not payload.instruction.strip():
+        raise HTTPException(status_code=422, detail="instruction is required")
+    try:
+        return create_task(
+            project_slug=project_slug,
+            instruction=payload.instruction.strip(),
+            skill_name=payload.skill_name,
+            attachments=[attachment.model_dump() for attachment in payload.attachments],
+            confirmed=payload.confirmed,
+            workflow_mode=payload.workflow_mode,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/api/projects/{project_slug}/hastur/tasks/{task_id}/events")
+def stream_hastur_task(project_slug: str, task_id: str):
+    try:
+        return StreamingResponse(stream_task_events(task_id), media_type="text/event-stream")
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/api/projects/{project_slug}/hastur/tasks/{task_id}/resume")
+def resume_hastur_task(project_slug: str, task_id: str, payload: HasturTaskResumeRequest):
+    try:
+        return resume_task(task_id, payload.answer, payload.confirmed, payload.choice_id, payload.revision_request)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/api/projects/{project_slug}/hastur/tasks/{task_id}/cancel")
+def cancel_hastur_task(project_slug: str, task_id: str):
+    try:
+        return cancel_task(task_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/api/projects/{project_slug}/hastur/apply-operation")

@@ -1,53 +1,53 @@
 # Architecture
 
-The v0.2.1 app is a local-first FastAPI application with a lightweight HTML/CSS/JavaScript dashboard.
-
-## Flow
+The app is a local FastAPI control plane for Godot prototype projects.
 
 ```text
-User dashboard
-  -> FastAPI routes
-  -> settings/project services
-  -> LLM provider and local generators
-  -> workspace/generated_godot_projects/<slug>
+Browser dashboard
+  -> FastAPI routes in app/api/
+  -> services in app/services/
+  -> provider adapters in app/models/
+  -> generated Godot projects in workspace/generated_godot_projects/
 ```
 
-## Backend
+## Core Services
 
-- `app/main.py` creates the FastAPI app, mounts static files, and renders the dashboard.
-- `app/api/routes_settings.py` exposes settings and LLM connection testing.
-- `app/api/routes_projects.py` exposes project create/list/detail APIs.
-- `app/services/settings_service.py` reads and writes local private settings.
-- `app/services/project_service.py` coordinates document generation, Godot generation, review output, and optional Git commit.
+- `app/main.py` creates the FastAPI app and serves the dashboard.
+- `app/api/routes_settings.py` exposes key saving and LLM connection testing.
+- `app/api/routes_godot_projects.py` creates blank Hastur-enabled Godot projects.
+- `app/api/routes_hastur.py` manages broker status, executors, chat-style Hastur interaction, and task streaming.
+- `app/api/routes_skills.py` manages Claude Code-style skills across vendored, global, and project scopes.
+- `app/api/routes_assets.py` exposes image generation and asset review actions.
+- `app/api/routes_git.py` exposes project-local Git status, changed files, project save, branch, merge-to-main, history, safe restore-to-commit, revert, and selected-file compatibility actions.
+- `app/services/settings_service.py` stores private settings locally and hides secrets from public responses.
+- `app/services/hastur_chat_service.py` builds the skill-grounded LLM prompt, includes uploaded context, and executes safe Hastur code when allowed.
+- `app/services/hastur_skill_service.py` discovers Claude Code-style `SKILL.md` packages from vendored, global, and project locations; parses frontmatter; supports safe user uploads/deletes; and returns lightweight metadata for prompt injection.
+- `app/services/hastur_task_service.py` runs the Codex-like Hastur task loop: stream LLM-authored public thoughts, structured task breakdown/progress, and assistant body text into one chat bubble, inject an abstract capability registry plus lightweight skill/Godot-doc indexes, summarize image attachments once, resolve LLM `context_requests` on demand, build hidden plans, pause only through LLM-instantiated modal prompts, generate one complete Hastur editor batch per approved plan/direct action or per LLM-selected sequential subtask, repair failed batches with compact Hastur error context until success/cancel/unrecoverable or repeated-stall failure, and return final answers from execution outputs.
+- `app/services/asset_service.py` writes image files, manifests, GDD references, and Blender reference notes.
+- `app/services/git_service.py` wraps generated-project-scoped safe Git commands with Godot VCS metadata, friendly changed-file status fields, local-change-preserving branch creation, guarded branch switching, project-level saves, and safe restore-to-commit commits. Hard reset rollback is disabled.
 
-## Agent Layer
+## Provider Model
 
-The agent modules are intentionally simple. They wrap prompts for GDD, technical design, feature tasks, asset list, review reports, and Godot operation plans. Text generation can use `mock`, `openai`, `anthropic`, `deepseek`, or an OpenAI-compatible local/custom endpoint configured from the dashboard.
+The dashboard only accepts API keys. Provider selection and model defaults are backend concerns. OpenAI is the default provider path; Anthropic, DeepSeek, and OpenAI-compatible settings remain supported through saved configuration for advanced/local deployments.
 
-## Godot Generator
+There is no normal runtime placeholder provider. Missing API keys or provider failures are returned as readable user-facing errors.
 
-`app/tools/godot_project_tools.py` dispatches to template modules under `app/tools/godot_templates/`. The 2D and 3D templates write Godot scene text files, scripts, project settings, asset directories, and generated-asset cache folders.
+## Godot/Hastur Project Shape
 
-## Workspace
+Generated projects include:
 
-- `workspace/config/settings.json` stores private settings and API keys.
-- `workspace/generated_godot_projects/` stores generated Godot projects.
-- `workspace/cache/` is reserved for future shared cache data.
-- `runtime/` stores portable Micromamba and the local Python environment.
-## v0.3 Pipeline
+- `project.godot`
+- `scenes/Main.tscn`
+- `addons/hasturoperationgd/`
+- `docs/GODOT_PROJECT.md`
+- third-party notices and Hastur license files
 
-The app is organized as a local FastAPI control plane:
+The Hastur editor plugin is enabled in `project.godot`. The app does not add the `GameExecutor` autoload by default.
 
-- `app/api/` exposes settings, project, asset, and Hastur routes.
-- `app/services/asset_service.py` owns image asset generation, cache writes, manifest updates, GDD attachment, and Blender reference notes.
-- `app/models/image_provider.py` abstracts `mock` and OpenAI image generation. The OpenAI path defaults to `gpt-image-2`.
-- `app/services/hastur_service.py` validates structured Godot operations and converts them into controlled GDScript snippets before calling a local Hastur broker.
-- `app/services/broker_service.py` starts, stops, checks, and captures logs from the vendored Hastur broker-server.
-- `app/services/godot_project_service.py` creates standalone Godot projects with the Hastur addon copied into `addons/hasturoperationgd/`.
-- `app/services/godot_operation_service.py` uses the configured LLM provider to plan Godot operations, then validates them before execution.
-- `app/agent/godot_operation_planner.py` prepares the future LLM planning step by validating JSON operation plans.
-- `app/templates/index.html` and `app/static/js/app.js` provide the bilingual dashboard. The Godot Project panel is the only project creation UI; action results render inside the panel that produced them instead of a shared output area.
+## Local State
 
-Generated project assets are kept inside each Godot project folder so the project remains portable.
-
-Godot-related implementation must reference local `godot-docs/`. The Hastur addon follows Godot's documented `addons/<plugin_name>/plugin.cfg` convention and is enabled in `project.godot` under `[editor_plugins]`.
+- `workspace/config/settings.json`: private local settings and secrets.
+- `workspace/skills/`: user-uploaded global skills.
+- `workspace/generated_godot_projects/`: generated Godot projects.
+- `workspace/cache/`: local caches.
+- `runtime/`: local Python runtime created by bootstrap scripts; not committed.

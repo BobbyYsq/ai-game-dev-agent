@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import GENERATED_PROJECTS_DIR
-from app.models.image_provider import get_image_provider
+from app.models.image_provider import get_image_provider, validate_image_generation_settings
 from app.services.settings_service import load_private_settings
 
 
@@ -90,7 +90,8 @@ def generate_image_asset(
         raise ValueError(f"Unsupported image purpose: {purpose}")
     project_dir = get_project_dir(project_slug)
     settings = load_private_settings()
-    image_model = model or settings.get("openai_image_model", "gpt-image-2")
+    validate_image_generation_settings(size=size, quality=quality)
+    image_model = model or settings.get("openai_image_model", "gpt-image-1.5")
     provider = get_image_provider()
     generated = provider.generate_image(prompt=prompt, model=image_model, size=size, quality=quality)
 

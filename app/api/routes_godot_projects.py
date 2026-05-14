@@ -1,7 +1,9 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+import subprocess
 
 from app.services.godot_project_service import create_godot_project
+from app.services.git_service import GitCommandError, friendly_git_error
 
 router = APIRouter()
 
@@ -34,3 +36,8 @@ def create_standalone_godot_project(payload: CreateGodotProjectRequest):
         ).__dict__
     except FileNotFoundError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except GitCommandError as exc:
+        raise HTTPException(status_code=400, detail=friendly_git_error(exc)) from exc
+    except subprocess.CalledProcessError as exc:
+        detail = exc.stderr or exc.stdout or str(exc)
+        raise HTTPException(status_code=400, detail=detail) from exc

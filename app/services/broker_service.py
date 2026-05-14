@@ -6,10 +6,20 @@ import secrets
 import shutil
 import subprocess
 import threading
+import re
 from typing import Any
 
+import httpx
+
 from app.config import HASTUR_BROKER_DIR
-from app.services.settings_service import load_private_settings, save_private_settings
+from app.services.settings_service import (
+    DEFAULT_HASTUR_HOST,
+    DEFAULT_HASTUR_HTTP_PORT,
+    DEFAULT_HASTUR_TCP_PORT,
+    load_private_settings,
+    save_private_settings,
+    _safe_hastur_port,
+)
 
 
 _process: subprocess.Popen | None = None
@@ -35,6 +45,22 @@ def _command(name: str) -> str:
 def _append_log(line: str) -> None:
     with _lock:
         _logs.append(line.rstrip())
+    _capture_auth_token(line)
+
+
+def _capture_auth_token(line: str) -> None:
+    match = re.search(r"(?:Auto-generated auth token|auth token):\s*([A-Za-z0-9._-]{16,})", line, re.IGNORECASE)
+    if not match:
+        return
+    settings = load_private_settings()
+    settings.update(
+        {
+            "hastur_enabled": True,
+            "hastur_auth_token": match.group(1),
+            "hastur_target_mode": "project_path",
+        }
+    )
+    save_private_settings(settings)
 
 
 def _read_output(process: subprocess.Popen) -> None:
@@ -48,9 +74,9 @@ def _load_or_create_config(host: str | None = None, http_port: int | None = None
     settings = load_private_settings()
     token = str(settings.get("hastur_auth_token") or secrets.token_hex(32))
     config = BrokerConfig(
-        host=host or str(settings.get("hastur_broker_host", "localhost")),
-        http_port=int(http_port or settings.get("hastur_broker_http_port", 5302)),
-        tcp_port=int(tcp_port or settings.get("hastur_broker_tcp_port", 5301)),
+        host=host or str(settings.get("hastur_broker_host", DEFAULT_HASTUR_HOST)),
+        http_port=_safe_hastur_port(http_port or settings.get("hastur_broker_http_port"), DEFAULT_HASTUR_HTTP_PORT),
+        tcp_port=_safe_hastur_port(tcp_port or settings.get("hastur_broker_tcp_port"), DEFAULT_HASTUR_TCP_PORT),
         auth_token=token,
     )
     settings.update(
@@ -70,16 +96,33 @@ def _load_or_create_config(host: str | None = None, http_port: int | None = None
 
 def broker_status() -> dict[str, Any]:
     global _process
-    running = _process is not None and _process.poll() is None
+    managed_running = _process is not None and _process.poll() is None
     settings = load_private_settings()
+    host = settings.get("hastur_broker_host", DEFAULT_HASTUR_HOST)
+    http_port = _safe_hastur_port(settings.get("hastur_broker_http_port"), DEFAULT_HASTUR_HTTP_PORT)
+    tcp_port = _safe_hastur_port(settings.get("hastur_broker_tcp_port"), DEFAULT_HASTUR_TCP_PORT)
+    base_url = str(settings.get("hastur_base_url", f"http://{host}:{http_port}")).rstrip("/")
+    token = str(settings.get("hastur_auth_token") or "")
+    probe = _probe_broker(base_url, token)
+    running = managed_running or probe["http_available"]
     return {
         "running": running,
-        "pid": _process.pid if running and _process else None,
-        "host": settings.get("hastur_broker_host", "localhost"),
-        "http_port": int(settings.get("hastur_broker_http_port", 5302)),
-        "tcp_port": int(settings.get("hastur_broker_tcp_port", 5301)),
-        "base_url": settings.get("hastur_base_url", "http://localhost:5302"),
-        "has_auth_token": bool(settings.get("hastur_auth_token")),
+        "managed_running": managed_running,
+        "external_running": probe["http_available"] and not managed_running,
+        "can_stop": managed_running,
+        "pid": _process.pid if managed_running and _process else None,
+        "host": host,
+        "http_port": http_port,
+        "tcp_port": tcp_port,
+        "base_url": base_url,
+        "has_auth_token": bool(token),
+        "token_state": probe["token_state"],
+        "http_available": probe["http_available"],
+        "health": probe["health"],
+        "executors_available": probe["executors_available"],
+        "executor_count": len(probe["executors"]),
+        "executors": probe["executors"],
+        "message": _broker_status_message(managed_running, probe),
     }
 
 
@@ -97,6 +140,10 @@ def start_broker(host: str | None = None, http_port: int | None = None, tcp_port
         raise FileNotFoundError(f"Hastur broker directory not found: {HASTUR_BROKER_DIR}")
 
     config = _load_or_create_config(host, http_port, tcp_port)
+    existing = _probe_broker(f"http://{config.host}:{config.http_port}", config.auth_token)
+    if existing["http_available"]:
+        _append_log(f"Broker is already reachable at {config.host}:{config.http_port}.")
+        return {"success": True, "message": "Broker is already running outside this dashboard.", "status": broker_status()}
     npm = _command("npm")
     npx = _command("npx")
 
@@ -148,7 +195,14 @@ def stop_broker() -> dict[str, Any]:
     global _process
     if _process is None or _process.poll() is not None:
         _process = None
-        return {"success": True, "message": "Broker is not running.", "status": broker_status()}
+        current = broker_status()
+        if current.get("external_running"):
+            return {
+                "success": False,
+                "message": "Broker is running outside this dashboard. Stop it from the process that started it.",
+                "status": current,
+            }
+        return {"success": True, "message": "Broker is not running.", "status": current}
     _append_log("Stopping Hastur broker-server.")
     _process.terminate()
     try:
@@ -159,3 +213,43 @@ def stop_broker() -> dict[str, Any]:
         _process.wait(timeout=5)
     _process = None
     return {"success": True, "message": "Broker stopped.", "status": broker_status()}
+
+
+def _probe_broker(base_url: str, token: str) -> dict[str, Any]:
+    probe: dict[str, Any] = {
+        "http_available": False,
+        "health": None,
+        "executors_available": False,
+        "executors": [],
+        "token_state": "missing" if not token else "unknown",
+        "error": "",
+    }
+    try:
+        with httpx.Client(timeout=1.5) as client:
+            health = client.get(f"{base_url}/api/health")
+            health.raise_for_status()
+            probe["http_available"] = True
+            probe["health"] = health.json()
+            if not token:
+                return probe
+            executors = client.get(f"{base_url}/api/executors", headers={"Authorization": f"Bearer {token}"})
+            if executors.status_code in {401, 403}:
+                probe["token_state"] = "invalid"
+                return probe
+            executors.raise_for_status()
+            payload = executors.json()
+            data = payload.get("data") if isinstance(payload, dict) else payload
+            probe["executors"] = data if isinstance(data, list) else []
+            probe["executors_available"] = True
+            probe["token_state"] = "ready"
+    except (httpx.HTTPError, ValueError) as exc:
+        probe["error"] = str(exc)
+    return probe
+
+
+def _broker_status_message(managed_running: bool, probe: dict[str, Any]) -> str:
+    if managed_running:
+        return "Dashboard-managed broker is running."
+    if probe.get("http_available"):
+        return "Broker is running outside this dashboard."
+    return "Broker is stopped or unreachable."

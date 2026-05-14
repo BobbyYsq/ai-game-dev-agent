@@ -19,7 +19,7 @@ router = APIRouter()
 class GenerateImageRequest(BaseModel):
     prompt: str
     purpose: str = "concept_art"
-    model: str = "gpt-image-2"
+    model: str | None = None
     size: str = "1024x1024"
     quality: str = "medium"
 
@@ -52,6 +52,8 @@ def generate_project_image(project_slug: str, payload: GenerateImageRequest):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Image generation failed: {exc}") from exc
 
 
 @router.get("/api/projects/{project_slug}/assets/{asset_id}/file")

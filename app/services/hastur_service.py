@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Literal
 
 import httpx
@@ -60,6 +61,19 @@ class HasturExecutePayload(BaseModel):
     code: str
     project_path: str
     executor_id: str | None = None
+    project_name: str | None = None
+    type: str | None = None
+
+
+class EmptyGDScriptError(ValueError):
+    pass
+
+
+GDSCRIPT_IDENTIFIER_REWRITES = {
+    "class_name": "node_type_name",
+}
+
+GODOT_DAP_PORT = 6006
 
 
 def get_hastur_settings() -> dict[str, Any]:
@@ -69,6 +83,8 @@ def get_hastur_settings() -> dict[str, Any]:
         "base_url": str(settings.get("hastur_base_url", "http://localhost:5302")).rstrip("/"),
         "auth_token": settings.get("hastur_auth_token", ""),
         "target_mode": settings.get("hastur_target_mode", "project_path"),
+        "hastur_broker_host": settings.get("hastur_broker_host", "localhost"),
+        "hastur_broker_tcp_port": settings.get("hastur_broker_tcp_port", 5301),
     }
 
 
@@ -115,6 +131,232 @@ def godot_value(value: str | int | float | bool | None) -> str:
     if isinstance(value, (int, float)):
         return str(value)
     return godot_string("" if value is None else str(value))
+
+
+def normalize_gdscript_code(code: str) -> str:
+    text = _strip_code_fence(code).replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+    if not text.strip():
+        raise EmptyGDScriptError("GDScript snippet is empty.")
+    text = _coerce_hastur_entrypoint(text)
+
+    normalized_lines = []
+    for line in text.split("\n"):
+        if not line.strip():
+            normalized_lines.append("")
+            continue
+        match = re.match(r"^[\t ]+", line)
+        if not match:
+            normalized_lines.append(_rewrite_unsafe_identifiers(line.rstrip()))
+            continue
+        leading = match.group(0)
+        columns = 0
+        for char in leading:
+            columns += 4 if char == "\t" else 1
+        tabs = max(1, (columns + 3) // 4)
+        normalized_lines.append(("\t" * tabs) + _rewrite_unsafe_identifiers(line[len(leading) :].rstrip()))
+    return "\n".join(normalized_lines).strip("\n")
+
+
+def _strip_code_fence(code: str) -> str:
+    text = code.strip()
+    fenced = re.fullmatch(r"```(?:gdscript|gd|gds|text)?\s*\n?(.*?)\n?```", text, re.DOTALL | re.IGNORECASE)
+    return fenced.group(1) if fenced else text
+
+
+def _coerce_hastur_entrypoint(code: str) -> str:
+    if "extends" in code:
+        return _coerce_full_class_hastur_entrypoint(code)
+    if not re.search(r"(?m)^func\s+\w+\s*\(", code):
+        return code
+
+    converted = code
+    if re.search(r"(?m)^func\s+execute\s*\(\s*executeContext\s*\)\s*:", converted):
+        pass
+    elif re.search(r"(?m)^func\s+_execute\s*\(\s*executeContext\s*\)\s*:", converted):
+        converted = re.sub(r"(?m)^func\s+_execute\s*\(", "func execute(", converted, count=1)
+    elif re.search(r"(?m)^func\s+_hastur_batch\s*\(\s*executeContext\s*\)\s*:", converted):
+        converted = "func execute(executeContext):\n\t_hastur_batch(executeContext)\n\n" + converted
+    elif re.search(r"(?m)^func\s+run\s*\(\s*\)\s*:", converted):
+        converted = "var executeContext\n\nfunc execute(executeContext):\n\tself.executeContext = executeContext\n\trun()\n\n" + converted
+    else:
+        converted = re.sub(r"(?m)^func\s+\w+\s*\(", "func execute(", converted, count=1)
+    return "extends RefCounted\n\n" + converted
+
+
+def _coerce_full_class_hastur_entrypoint(code: str) -> str:
+    if re.search(r"(?m)^func\s+execute\s*\(\s*executeContext\s*\)", code):
+        return code
+    if re.search(r"(?m)^func\s+_execute\s*\(\s*executeContext\s*\)", code):
+        return re.sub(r"(?m)^func\s+_execute\s*\(", "func execute(", code, count=1)
+    if re.search(r"(?m)^func\s+run\s*\(\s*executeContext\s*\)", code):
+        return re.sub(r"(?m)^func\s+run\s*\(", "func execute(", code, count=1)
+
+    bridge = ""
+    if re.search(r"(?m)^func\s+_hastur_batch\s*\(\s*executeContext\s*\)", code):
+        bridge = "\n\nfunc execute(executeContext):\n\t_hastur_batch(executeContext)\n"
+    elif re.search(r"(?m)^func\s+run\s*\(\s*\)", code):
+        context_var = "\n" if re.search(r"(?m)^var\s+executeContext\b", code) else "\n\nvar executeContext\n"
+        bridge = f"{context_var}\nfunc execute(executeContext):\n\tself.executeContext = executeContext\n\trun()\n"
+
+    if not bridge:
+        return code
+
+    match = re.search(r"(?m)^extends\s+[^\n]+", code)
+    if not match:
+        return code
+    insert_at = match.end()
+    return code[:insert_at] + bridge + code[insert_at:]
+
+
+def _rewrite_unsafe_identifiers(line: str) -> str:
+    result = line
+    for original, replacement in GDSCRIPT_IDENTIFIER_REWRITES.items():
+        result = re.sub(rf"\b{re.escape(original)}\b", replacement, result)
+    return result
+
+
+def _broker_failure_message(broker_response: Any) -> str | None:
+    data = _execution_payload(broker_response)
+    if not isinstance(data, dict):
+        return None
+    if data.get("success") is False:
+        return str(data.get("message") or data.get("error") or "Hastur broker reported failure.")
+    if data.get("compile_success") is False:
+        detail = data.get("compile_error") or data.get("error") or "Unknown compile error."
+        return f"Hastur compile failed: {detail}"
+    if data.get("run_success") is False:
+        detail = data.get("run_error") or data.get("error") or "Unknown runtime error."
+        return f"Hastur run failed: {detail}"
+    return None
+
+
+def _hastur_project_path(project_dir) -> str:
+    return project_dir.resolve().as_posix()
+
+
+def _ensure_project_hastur_settings(project_dir, settings: dict[str, Any]) -> None:
+    project_file = project_dir / "project.godot"
+    if not project_file.exists():
+        return
+    host = str(settings.get("hastur_broker_host") or "localhost")
+    try:
+        port = int(settings.get("hastur_broker_tcp_port") or 5301)
+    except (TypeError, ValueError):
+        port = 5301
+    original = project_file.read_text(encoding="utf-8", errors="replace")
+    desired_lines = [f'broker_host="{host}"', f"broker_port={port}"]
+    lines = original.splitlines()
+    output: list[str] = []
+    found = False
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if line.strip() != "[hastur_operation]":
+            output.append(line)
+            index += 1
+            continue
+        found = True
+        output.append(line)
+        index += 1
+        section_lines = []
+        while index < len(lines) and not (lines[index].strip().startswith("[") and lines[index].strip().endswith("]")):
+            stripped = lines[index].strip()
+            if not (stripped.startswith("broker_host=") or stripped.startswith("broker_port=")):
+                section_lines.append(lines[index])
+            index += 1
+        output.extend(desired_lines)
+        output.extend(section_lines)
+
+    updated = "\n".join(output).rstrip() + "\n"
+    if not found:
+        block = "\n[hastur_operation]\n" + "\n".join(desired_lines) + "\n"
+        marker = "\n[editor_plugins]"
+        if marker in original:
+            updated = original.replace(marker, block + marker, 1)
+        else:
+            updated = original.rstrip() + "\n" + block
+    if updated != original:
+        project_file.write_text(updated, encoding="utf-8")
+
+
+def _response_payload(response: httpx.Response) -> Any:
+    try:
+        return response.json()
+    except ValueError:
+        return response.text
+
+
+def _normalize_executor_path(value: str) -> str:
+    return re.sub(r"/+", "/", value.replace("\\", "/")).rstrip("/").lower()
+
+
+def _executor_list(payload: Any) -> list[dict[str, Any]]:
+    data = payload.get("data") if isinstance(payload, dict) else payload
+    if isinstance(data, dict):
+        data = data.get("executors") or data.get("data") or []
+    return [item for item in data if isinstance(item, dict)] if isinstance(data, list) else []
+
+
+def _resolve_executor_id(
+    client: httpx.Client,
+    settings: dict[str, Any],
+    project_dir,
+    executor_type: str | None,
+) -> str:
+    if not hasattr(client, "get"):
+        return ""
+    try:
+        response = client.get(f"{settings['base_url']}/api/executors", headers=build_headers(settings))
+        response.raise_for_status()
+    except Exception:
+        return ""
+    target_path = _normalize_executor_path(_hastur_project_path(project_dir))
+    target_name = project_dir.name.lower()
+    for executor in _executor_list(_response_payload(response)):
+        if executor_type and str(executor.get("type") or "") != executor_type:
+            continue
+        executor_path = _normalize_executor_path(str(executor.get("project_path") or ""))
+        executor_name = str(executor.get("project_name") or "").lower()
+        if executor_path and (executor_path == target_path or executor_path.endswith(f"/{target_name}")):
+            return str(executor.get("id") or "")
+        if executor_name == target_name:
+            return str(executor.get("id") or "")
+    return ""
+
+
+def _broker_http_error_message(response: httpx.Response, broker_response: Any, project_dir, executor_type: str | None) -> str:
+    status_code = getattr(response, "status_code", 0)
+    reason = getattr(response, "reason_phrase", "") or "HTTP error"
+    error = ""
+    hint = ""
+    if isinstance(broker_response, dict):
+        error = str(broker_response.get("error") or broker_response.get("message") or "")
+        hint = str(broker_response.get("hint") or "")
+    else:
+        error = str(broker_response or "")
+    if status_code == 404 and "No connected Hastur Executor" in error:
+        target = f" for executor type '{executor_type}'" if executor_type else ""
+        return (
+            f"No connected Hastur executor matched this project{target}. "
+            f"Open the selected Godot project with the Hastur plugin enabled, then check the Management view executor list. "
+            f"Expected project path: {_hastur_project_path(project_dir)}. "
+            f"Hastur uses TCP localhost:5301; Godot DAP localhost:{GODOT_DAP_PORT} is a different debug port."
+        )
+    detail = error or reason
+    if hint:
+        detail = f"{detail} {hint}"
+    return f"Hastur execute failed ({status_code} {reason}): {detail}".strip()
+
+
+def _execution_payload(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    if "compile_success" in value or "run_success" in value:
+        return value
+    data = value.get("data")
+    if isinstance(data, dict):
+        return _execution_payload(data)
+    return value
 
 
 def build_gdscript(operation: GodotOperation) -> str:
@@ -194,23 +436,83 @@ def apply_hastur_operation(project_slug: str, operation: GodotOperation, executo
     if not settings["enabled"]:
         return HasturExecuteResult(success=False, message="Hastur bridge is disabled.")
 
-    gdscript = build_gdscript(operation)
-    payload = HasturExecutePayload(code=gdscript, project_path=str(project_dir), executor_id=executor_id)
+    gdscript = normalize_gdscript_code(build_gdscript(operation))
+    _ensure_project_hastur_settings(project_dir, settings)
+    payload = HasturExecutePayload(code=gdscript, project_path=_hastur_project_path(project_dir), executor_id=executor_id)
     try:
         with httpx.Client(timeout=15.0) as client:
+            if not payload.executor_id:
+                payload.executor_id = _resolve_executor_id(client, settings, project_dir, None) or None
             response = client.post(
                 f"{settings['base_url']}/api/execute",
                 headers=build_headers(settings),
                 json=payload.model_dump(exclude_none=True),
             )
+            if getattr(response, "status_code", 200) >= 400:
+                broker_response = _response_payload(response)
+                return HasturExecuteResult(
+                    success=False,
+                    message=_broker_http_error_message(response, broker_response, project_dir, None),
+                    broker_response=broker_response,
+                    gdscript=gdscript,
+                )
             response.raise_for_status()
-            try:
-                broker_response = response.json()
-            except ValueError:
-                broker_response = response.text
+            broker_response = _response_payload(response)
+            failure = _broker_failure_message(broker_response)
             return HasturExecuteResult(
-                success=True,
-                message="Hastur operation executed.",
+                success=failure is None,
+                message=failure or "Hastur operation executed.",
+                broker_response=broker_response,
+                gdscript=gdscript,
+            )
+    except httpx.HTTPError as exc:
+        return HasturExecuteResult(success=False, message=f"Hastur execute failed: {exc}", gdscript=gdscript)
+
+
+def apply_hastur_code(
+    project_slug: str,
+    code: str,
+    executor_id: str | None = None,
+    executor_type: str | None = None,
+) -> HasturExecuteResult:
+    project_dir = get_project_dir(project_slug)
+    settings = get_hastur_settings()
+    if not settings["enabled"]:
+        return HasturExecuteResult(success=False, message="Hastur bridge is disabled.")
+    try:
+        gdscript = normalize_gdscript_code(code)
+    except EmptyGDScriptError as exc:
+        return HasturExecuteResult(success=False, message=str(exc), gdscript=code)
+    _ensure_project_hastur_settings(project_dir, settings)
+    payload = HasturExecutePayload(
+        code=gdscript,
+        project_path=_hastur_project_path(project_dir),
+        executor_id=executor_id,
+        type=executor_type,
+    )
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            if not payload.executor_id:
+                payload.executor_id = _resolve_executor_id(client, settings, project_dir, executor_type) or None
+            response = client.post(
+                f"{settings['base_url']}/api/execute",
+                headers=build_headers(settings),
+                json=payload.model_dump(exclude_none=True),
+            )
+            if getattr(response, "status_code", 200) >= 400:
+                broker_response = _response_payload(response)
+                return HasturExecuteResult(
+                    success=False,
+                    message=_broker_http_error_message(response, broker_response, project_dir, executor_type),
+                    broker_response=broker_response,
+                    gdscript=gdscript,
+                )
+            response.raise_for_status()
+            broker_response = _response_payload(response)
+            failure = _broker_failure_message(broker_response)
+            return HasturExecuteResult(
+                success=failure is None,
+                message=failure or "Hastur skill code executed.",
                 broker_response=broker_response,
                 gdscript=gdscript,
             )

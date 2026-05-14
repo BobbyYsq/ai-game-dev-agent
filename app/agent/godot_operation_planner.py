@@ -57,12 +57,3 @@ Feature tasks:
 {feature_tasks}
 """.strip()
 
-
-def mock_operation_plan() -> GodotOperationPlan:
-    return GodotOperationPlan(
-        operations=[
-            GodotOperation(operation="open_scene", target_scene="res://scenes/Main.tscn"),
-            GodotOperation(operation="create_node", node_type="Node2D", node_name="AgentGeneratedNode", parent_path="."),
-            GodotOperation(operation="save_scene"),
-        ]
-    )
